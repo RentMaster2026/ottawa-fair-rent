@@ -75,7 +75,7 @@ const UNIT_TYPES = [
   { label: "3+ Bedroom",        key: "3plus"    },
 ];
 
-const ADDON_COSTS    = { parking: 150, utilities: 120 };
+const ADDON_COSTS    = { parking: 250, utilities: 120 };
 const YEARLY_INFLATION = 0.038; // Ottawa rent growth avg ~3.5–4% per CMHC
 
 // Sorted neighbourhood list for dropdown
@@ -505,7 +505,7 @@ export default function App() {
                   Does your rent include…
                 </div>
                 <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  <ToggleChip label="Parking"   sub="+$150/mo to benchmark" checked={parking}   onChange={e => setParking(e.target.checked)}   />
+                  <ToggleChip label="Parking"   sub="+$250/mo to benchmark" checked={parking}   onChange={e => setParking(e.target.checked)}   />
                   <ToggleChip label="Utilities" sub="+$120/mo to benchmark" checked={utilities} onChange={e => setUtilities(e.target.checked)} />
                 </div>
               </div>

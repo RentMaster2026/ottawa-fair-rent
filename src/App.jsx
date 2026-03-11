@@ -1,15 +1,4 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-// ─── Supabase ─────────────────────────────────────────────────────────────────
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
-
-const COOLDOWN_KEY = "ottawa_fair_rent_last_submit";
-const COOLDOWN_MS  = 60 * 1000;
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -38,7 +27,7 @@ const HOOD_MULTIPLIERS = {
   "Hunt Club":0.9,"Barrhaven":0.89,"South Keys":0.88,"Vanier":0.85,
 };
 
-const ADDON_COSTS = { parking: 250, utilities: 120 };
+const ADDON_COSTS = { parking: 150, utilities: 120 };
 const YEARLY_INFLATION = 0.04;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -83,17 +72,13 @@ function getInsight(pct, moveInYear) {
 function useCountUp(target, duration = 1100) {
   const [val, setVal] = useState(0);
   const raf = useRef(null);
-  const prev = useRef(0);
   useEffect(() => {
-    if (target === 0) return;
-    const from = prev.current;
-    prev.current = target;
     let start = null;
     const step = (ts) => {
       if (!start) start = ts;
       const p = Math.min((ts - start) / duration, 1);
       const e = 1 - Math.pow(1 - p, 3);
-      setVal(Math.round(from + (target - from) * e));
+      setVal(Math.round(target * e));
       if (p < 1) raf.current = requestAnimationFrame(step);
     };
     raf.current = requestAnimationFrame(step);
@@ -211,31 +196,16 @@ function Toast({ visible }) {
 export default function App() {
   const curYear = new Date().getFullYear();
 
-  const [form,        setForm]        = useState({ neighborhood: "", unitType: "", rent: "", moveInYear: "" });
-  const [parking,     setParking]     = useState(false);
-  const [utilities,   setUtilities]   = useState(false);
-  const [errors,      setErrors]      = useState({});
-  const [result,      setResult]      = useState(null);
-  const [revealed,    setRevealed]    = useState(false);
-  const [toast,       setToast]       = useState(false);
-  const [submitting,  setSubmitting]  = useState(false);
-  const [saveWarning, setSaveWarning] = useState("");
-  const [realCount,   setRealCount]   = useState(0);
-  const [countLoaded, setCountLoaded] = useState(false);
-
-  const displayCount = useCountUp(countLoaded ? realCount : 0, 1200);
+  const [form,      setForm]      = useState({ neighborhood: "", unitType: "", rent: "", moveInYear: "" });
+  const [parking,   setParking]   = useState(false);
+  const [utilities, setUtilities] = useState(false);
+  const [errors,    setErrors]    = useState({});
+  const [result,    setResult]    = useState(null);
+  const [revealed,  setRevealed]  = useState(false);
+  const [toast,     setToast]     = useState(false);
   const toastRef = useRef(null);
 
-  // Load real submission count on mount
-  useEffect(() => {
-    supabase
-      .from("rent_submissions")
-      .select("*", { count: "exact", head: true })
-      .then(({ count, error }) => {
-        if (!error) setRealCount(count || 0);
-        setCountLoaded(true);
-      });
-  }, []);
+  const displayCount = useCountUp(1847, 1200);
 
   useEffect(() => {
     if (result) setTimeout(() => setRevealed(true), 60);
@@ -252,18 +222,14 @@ export default function App() {
     return e;
   }
 
-  async function handleCalculate() {
+  function handleCalculate() {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     setErrors({});
-    setSaveWarning("");
-    setSubmitting(true);
-
     const rent       = +form.rent;
     const moveInYear = +form.moveInYear;
     const { today, movein } = getMarket(form.neighborhood, form.unitType, moveInYear, parking, utilities);
     const sameYear = moveInYear === curYear;
-
     setResult({
       rent, today, movein, sameYear,
       todayPct:   pctDiff(rent, today),
@@ -271,42 +237,12 @@ export default function App() {
       todayDiff:  rent - today,
       moveinDiff: rent - (sameYear ? today : movein),
     });
-
-    // Save to Supabase with cooldown
-    try {
-      const lastSubmit = Number(localStorage.getItem(COOLDOWN_KEY) || 0);
-      const onCooldown = Date.now() - lastSubmit < COOLDOWN_MS;
-
-      if (!onCooldown) {
-        const { error } = await supabase.from("rent_submissions").insert({
-          neighborhood:      form.neighborhood,
-          unit_type:         form.unitType,
-          monthly_rent:      rent,
-          move_in_year:      moveInYear,
-          includes_parking:  parking,
-          includes_utilities: utilities,
-        });
-
-        if (!error) {
-          localStorage.setItem(COOLDOWN_KEY, String(Date.now()));
-          setRealCount(prev => prev + 1);
-        } else {
-          setSaveWarning("Result shown, but your submission wasn't saved.");
-        }
-      }
-      // silent on cooldown — result still shows fine
-    } catch {
-      setSaveWarning("Result shown, but your submission wasn't saved.");
-    } finally {
-      setSubmitting(false);
-    }
   }
 
   function handleReset() {
     setResult(null);
     setForm({ neighborhood: "", unitType: "", rent: "", moveInYear: "" });
-    setParking(false); setUtilities(false);
-    setErrors({}); setSaveWarning("");
+    setParking(false); setUtilities(false); setErrors({});
   }
 
   function copyShare() {
@@ -331,11 +267,9 @@ export default function App() {
   }, [result]);
 
   return (
-    <div style={{ minHeight: "100vh", width: "100%", background: "var(--bg)", fontFamily: "'Source Serif 4', serif", overflowX: "hidden" }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "'Source Serif 4', serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Playfair+Display:ital,wght@0,700;0,900;1,700;1,900&family=Source+Serif+4:opsz,wght@8..60,300;8..60,400;8..60,600&display=swap');
-
-        html, body, #root { width: 100%; margin: 0; padding: 0; }
 
         :root {
           --ink:        #1c1a17;
@@ -365,7 +299,6 @@ export default function App() {
         }
         .btn-primary:hover  { background: #2e2b25; transform: translateY(-1px); }
         .btn-primary:active { transform: scale(.99); }
-        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
         .btn-ghost {
           padding: 13px; background: transparent; color: var(--ink);
@@ -400,7 +333,7 @@ export default function App() {
       <Toast visible={toast} />
 
       {/* ── Masthead ── */}
-      <header style={{ background: "var(--ink)", color: "var(--paper)", borderBottom: "4px solid var(--accent)", width: "100%" }}>
+      <header style={{ background: "var(--ink)", color: "var(--paper)", borderBottom: "4px solid var(--accent)" }}>
         <div style={{ borderBottom: "1px solid rgba(255,255,255,.1)", padding: "9px 28px", display: "flex", justifyContent: "space-between" }}>
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: ".12em", textTransform: "uppercase", color: "rgba(255,255,255,.35)" }}>
             Ottawa · Ontario · Canada
@@ -420,7 +353,7 @@ export default function App() {
           </div>
           <div style={{ textAlign: "right", flexShrink: 0 }}>
             <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 30, fontWeight: 700, color: "#86efac", lineHeight: 1 }}>
-              {countLoaded ? displayCount.toLocaleString() : "—"}
+              {displayCount.toLocaleString()}
             </div>
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "rgba(255,255,255,.38)", letterSpacing: ".1em", textTransform: "uppercase", marginTop: 3 }}>
               submissions
@@ -473,13 +406,13 @@ export default function App() {
                   Does your rent include…
                 </div>
                 <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  <ToggleChip label="Parking"   sub="+$250/mo to benchmark" checked={parking}   onChange={e => setParking(e.target.checked)}   />
+                  <ToggleChip label="Parking"   sub="+$150/mo to benchmark" checked={parking}   onChange={e => setParking(e.target.checked)}   />
                   <ToggleChip label="Utilities" sub="+$120/mo to benchmark" checked={utilities} onChange={e => setUtilities(e.target.checked)} />
                 </div>
               </div>
 
-              <button className="btn-primary" onClick={handleCalculate} disabled={submitting} style={{ marginTop: 4 }}>
-                {submitting ? "Saving…" : "Compare My Rent →"}
+              <button className="btn-primary" onClick={handleCalculate} style={{ marginTop: 4 }}>
+                Compare My Rent →
               </button>
 
               <p style={{ textAlign: "center", fontFamily: "'DM Mono', monospace", fontSize: 10, color: "var(--ink-muted)", letterSpacing: ".06em", lineHeight: 1.8 }}>
@@ -584,13 +517,6 @@ export default function App() {
                   </a>
                 )}
               </div>
-
-              {/* Save warning */}
-              {saveWarning && (
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 14px" }}>
-                  ⚠ {saveWarning}
-                </div>
-              )}
 
               {/* CTAs */}
               <div className={`cta ${revealed ? "reveal d5" : ""}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>

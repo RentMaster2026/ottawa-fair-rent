@@ -204,6 +204,9 @@ export default function App() {
   const [revealed,  setRevealed]  = useState(false);
   const [toast,     setToast]     = useState(false);
   const toastRef = useRef(null);
+  const [realCount,   setRealCount]   = useState(0);
+  const [countLoaded, setCountLoaded] = useState(false);
+
 
   const displayCount = useCountUp(countLoaded ? realCount : 0, 1200);
 

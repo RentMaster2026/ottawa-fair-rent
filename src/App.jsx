@@ -205,7 +205,7 @@ export default function App() {
   const [toast,     setToast]     = useState(false);
   const toastRef = useRef(null);
 
-  const displayCount = useCountUp(1847, 1200);
+  const displayCount = useCountUp(countLoaded ? realCount : 0, 1200);
 
   useEffect(() => {
     if (result) setTimeout(() => setRevealed(true), 60);

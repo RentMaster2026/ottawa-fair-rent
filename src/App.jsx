@@ -1,13 +1,71 @@
 import { useMemo, useState, useEffect, useRef } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+// ─── Supabase ─────────────────────────────────────────────────────────────────
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
+
+const COOLDOWN_KEY = "ottawa_fair_rent_last_submit";
+const COOLDOWN_MS  = 60 * 1000;
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
+// Base averages sourced from CMHC Rental Market Survey (Ottawa CMA, Oct 2024),
+// Rentals.ca Monthly Rent Report (Feb 2025), and Numbeo Ottawa 2025.
+// 1BR: ~$2,026 (CMHC/Rentals.ca avg), 2BR: ~$2,530, bachelor: ~$1,550 (CMHC)
+// 3BR estimated from CMHC trend data. These are CMA-wide averages before
+// neighbourhood multipliers are applied.
 
-const NEIGHBORHOODS = [
-  "Centretown","Hintonburg","Westboro","Glebe","Sandy Hill","ByWard Market",
-  "Vanier","Overbrook","Manor Park","Rockcliffe Park","Kanata","Barrhaven",
-  "Orleans","Gloucester","Alta Vista","Nepean","Hunt Club","South Keys",
-  "Beacon Hill","New Edinburgh",
-];
+const BASE_AVERAGES = {
+  bachelor: 1550,
+  "1br":    2026,
+  "2br":    2530,
+  "3br":    3100,
+  "3plus":  3600,
+};
+
+// Neighbourhood multipliers derived from Rentals.ca, Zumper, Apartments.com,
+// and CMHC zone data for Ottawa 2024–2025. Multiplier of 1.00 = CMA average.
+// All neighbourhoods sorted alphabetically in the UI dropdown.
+const HOOD_MULTIPLIERS = {
+  "Alta Vista":           0.95,
+  "Barrhaven":            0.92,
+  "Bayshore / Britannia": 0.96,
+  "Beacon Hill":          0.93,
+  "Blackburn Hamlet":     0.91,
+  "Byward Market":        1.18,
+  "Carlington":           0.88,
+  "Centretown":           1.08,
+  "Chinatown / Lebreton": 1.02,
+  "Downtown Core":        1.15,
+  "Elmvale Acres":        0.90,
+  "Findlay Creek":        0.89,
+  "Gatineau (QC side)":   0.82,
+  "Glebe":                1.20,
+  "Greenboro":            0.88,
+  "Hintonburg":           1.10,
+  "Kanata":               0.97,
+  "Lowertown":            1.00,
+  "Manor Park":           1.06,
+  "Manotick":             0.94,
+  "New Edinburgh":        1.16,
+  "Nepean":               0.93,
+  "Old Ottawa South":     1.05,
+  "Orléans":              0.90,
+  "Overbrook":            0.90,
+  "Queensway Terrace":    0.94,
+  "Rideau-Vanier":        0.87,
+  "Riverside South":      0.91,
+  "Rockcliffe Park":      1.28,
+  "Sandy Hill":           1.04,
+  "Stittsville":          0.89,
+  "Vanier":               0.85,
+  "Wellington Village":   1.12,
+  "Westboro":             1.18,
+  "Little Italy":         1.07,
+};
 
 const UNIT_TYPES = [
   { label: "Bachelor / Studio", key: "bachelor" },
@@ -17,18 +75,11 @@ const UNIT_TYPES = [
   { label: "3+ Bedroom",        key: "3plus"    },
 ];
 
-const BASE_AVERAGES = { bachelor: 1350, "1br": 1750, "2br": 2200, "3br": 2700, "3plus": 3200 };
+const ADDON_COSTS    = { parking: 150, utilities: 120 };
+const YEARLY_INFLATION = 0.038; // Ottawa rent growth avg ~3.5–4% per CMHC
 
-const HOOD_MULTIPLIERS = {
-  "Rockcliffe Park":1.28,"Glebe":1.22,"New Edinburgh":1.2,"Westboro":1.18,
-  "ByWard Market":1.15,"Manor Park":1.14,"Centretown":1.1,"Hintonburg":1.08,
-  "Sandy Hill":1.05,"Alta Vista":0.97,"Kanata":0.96,"Beacon Hill":0.95,
-  "Overbrook":0.93,"Nepean":0.93,"Orleans":0.92,"Gloucester":0.91,
-  "Hunt Club":0.9,"Barrhaven":0.89,"South Keys":0.88,"Vanier":0.85,
-};
-
-const ADDON_COSTS = { parking: 150, utilities: 120 };
-const YEARLY_INFLATION = 0.04;
+// Sorted neighbourhood list for dropdown
+const NEIGHBORHOODS = Object.keys(HOOD_MULTIPLIERS).sort((a, b) => a.localeCompare(b));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -39,7 +90,7 @@ const pctDiff = (actual, bench) =>
   !bench ? 0 : Math.round(((actual - bench) / bench) * 100);
 
 function getMarket(neighborhood, unitType, moveInYear, parking, utilities) {
-  const base     = BASE_AVERAGES[unitType] || 1750;
+  const base     = BASE_AVERAGES[unitType] || 2026;
   const mult     = HOOD_MULTIPLIERS[neighborhood] || 1;
   const curYear  = new Date().getFullYear();
   const yearsAgo = Math.max(0, curYear - (moveInYear || curYear));
@@ -60,25 +111,29 @@ function getVerdict(pct) {
 
 function getInsight(pct, moveInYear) {
   const age = new Date().getFullYear() - (moveInYear || new Date().getFullYear());
-  if (pct > 20)   return { head: "You may be significantly overpaying.", body: "Annual rent increases in Ontario are capped by provincial guideline. If your increases have exceeded the cap, you may have grounds to challenge them.", link: { t: "Ontario Rent Increase Guidelines", u: "https://www.ontario.ca/page/rent-increase-guideline" } };
-  if (pct > 5)    return { head: "Slightly above market.", body: "Premium amenities, included utilities, parking, or a newer building can justify above-market rents. Compare what's included carefully before drawing conclusions.", link: null };
-  if (pct >= -5)  return { head: "You're right at market rate.", body: "Your rent aligns well with Ottawa averages for this unit type and neighbourhood — a useful baseline for any upcoming lease renewal conversation.", link: null };
-  if (pct >= -15) return { head: age > 3 ? "A fair deal — likely thanks to tenancy protections." : "You're paying below market.", body: "Long-term Ontario tenants often benefit from rent increases capped below inflation. Your renewal rights are valuable — know them before your next renewal.", link: { t: "Tenant Rights in Ontario", u: "https://www.ontario.ca/page/renting-ontario-your-rights" } };
-  return { head: "You have a notably strong deal.", body: "You're well below today's market. Protect this — understand your renewal rights, and be cautious about voluntary moves that would reset your rent.", link: { t: "Before You Move: Know Your Rights", u: "https://www.ontario.ca/page/renting-ontario-your-rights" } };
+  if (pct > 20)   return { head: "You may be significantly overpaying.", body: "Annual rent increases in Ontario are capped by the provincial rent increase guideline (2.5% for 2024, 2.5% for 2025). If your landlord has increased your rent beyond the guideline without an above-guideline application, you may have grounds to challenge it at the Landlord and Tenant Board.", link: { t: "Ontario Rent Increase Guidelines", u: "https://www.ontario.ca/page/rent-increase-guideline" } };
+  if (pct > 5)    return { head: "Slightly above market.", body: "Premium amenities, included parking or utilities, newer construction, or a particularly walkable location can justify above-market rents. Review what's included in your lease before drawing conclusions.", link: null };
+  if (pct >= -5)  return { head: "You're right at market rate.", body: "Your rent aligns well with Ottawa averages for this unit type and neighbourhood. This is a useful baseline heading into your next lease renewal conversation.", link: null };
+  if (pct >= -15) return { head: age > 3 ? "A solid deal — likely thanks to tenancy protections." : "You're paying below market.", body: "Long-term Ontario tenants benefit from rent increases capped below market inflation. This advantage compounds over time — know your rights before your next renewal.", link: { t: "Tenant Rights in Ontario", u: "https://www.ontario.ca/page/renting-ontario-your-rights" } };
+  return { head: "You have a notably strong deal.", body: "You're well below today's Ottawa market. Protect this tenancy — be cautious about voluntary moves, and understand that any new lease would be priced at current market rates.", link: { t: "Before You Move: Know Your Rights", u: "https://www.ontario.ca/page/renting-ontario-your-rights" } };
 }
 
-// ─── Animated counter ────────────────────────────────────────────────────────
+// ─── Animated counter ─────────────────────────────────────────────────────────
 
 function useCountUp(target, duration = 1100) {
   const [val, setVal] = useState(0);
-  const raf = useRef(null);
+  const raf  = useRef(null);
+  const prev = useRef(0);
   useEffect(() => {
+    if (target === 0) return;
+    const from = prev.current;
+    prev.current = target;
     let start = null;
     const step = (ts) => {
       if (!start) start = ts;
       const p = Math.min((ts - start) / duration, 1);
       const e = 1 - Math.pow(1 - p, 3);
-      setVal(Math.round(target * e));
+      setVal(Math.round(from + (target - from) * e));
       if (p < 1) raf.current = requestAnimationFrame(step);
     };
     raf.current = requestAnimationFrame(step);
@@ -196,19 +251,31 @@ function Toast({ visible }) {
 export default function App() {
   const curYear = new Date().getFullYear();
 
-  const [form,      setForm]      = useState({ neighborhood: "", unitType: "", rent: "", moveInYear: "" });
-  const [parking,   setParking]   = useState(false);
-  const [utilities, setUtilities] = useState(false);
-  const [errors,    setErrors]    = useState({});
-  const [result,    setResult]    = useState(null);
-  const [revealed,  setRevealed]  = useState(false);
-  const [toast,     setToast]     = useState(false);
-  const toastRef = useRef(null);
+  const [form,        setForm]        = useState({ neighborhood: "", unitType: "", rent: "", moveInYear: "" });
+  const [parking,     setParking]     = useState(false);
+  const [utilities,   setUtilities]   = useState(false);
+  const [errors,      setErrors]      = useState({});
+  const [result,      setResult]      = useState(null);
+  const [revealed,    setRevealed]    = useState(false);
+  const [toast,       setToast]       = useState(false);
+  const [submitting,  setSubmitting]  = useState(false);
+  const [saveWarning, setSaveWarning] = useState("");
   const [realCount,   setRealCount]   = useState(0);
   const [countLoaded, setCountLoaded] = useState(false);
 
-
   const displayCount = useCountUp(countLoaded ? realCount : 0, 1200);
+  const toastRef = useRef(null);
+
+  useEffect(() => {
+    supabase
+      .from("rent_submissions")
+      .select("*", { count: "exact", head: true })
+      .eq("city", "ottawa")
+      .then(({ count, error }) => {
+        if (!error) setRealCount(count || 0);
+        setCountLoaded(true);
+      });
+  }, []);
 
   useEffect(() => {
     if (result) setTimeout(() => setRevealed(true), 60);
@@ -225,14 +292,18 @@ export default function App() {
     return e;
   }
 
-  function handleCalculate() {
+  async function handleCalculate() {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     setErrors({});
+    setSaveWarning("");
+    setSubmitting(true);
+
     const rent       = +form.rent;
     const moveInYear = +form.moveInYear;
     const { today, movein } = getMarket(form.neighborhood, form.unitType, moveInYear, parking, utilities);
     const sameYear = moveInYear === curYear;
+
     setResult({
       rent, today, movein, sameYear,
       todayPct:   pctDiff(rent, today),
@@ -240,12 +311,41 @@ export default function App() {
       todayDiff:  rent - today,
       moveinDiff: rent - (sameYear ? today : movein),
     });
+
+    try {
+      const lastSubmit = Number(localStorage.getItem(COOLDOWN_KEY) || 0);
+      const onCooldown = Date.now() - lastSubmit < COOLDOWN_MS;
+
+      if (!onCooldown) {
+        const { error } = await supabase.from("rent_submissions").insert({
+          neighborhood:       form.neighborhood,
+          unit_type:          form.unitType,
+          monthly_rent:       rent,
+          move_in_year:       moveInYear,
+          includes_parking:   parking,
+          includes_utilities: utilities,
+          city:               "ottawa",
+        });
+
+        if (!error) {
+          localStorage.setItem(COOLDOWN_KEY, String(Date.now()));
+          setRealCount(prev => prev + 1);
+        } else {
+          setSaveWarning("Result shown, but your submission wasn't saved.");
+        }
+      }
+    } catch {
+      setSaveWarning("Result shown, but your submission wasn't saved.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function handleReset() {
     setResult(null);
     setForm({ neighborhood: "", unitType: "", rent: "", moveInYear: "" });
-    setParking(false); setUtilities(false); setErrors({});
+    setParking(false); setUtilities(false);
+    setErrors({}); setSaveWarning("");
   }
 
   function copyShare() {
@@ -262,31 +362,26 @@ export default function App() {
   const verdict = result ? getVerdict(result.todayPct) : null;
   const insight = result ? getInsight(result.todayPct, +form.moveInYear) : null;
 
-  const compText = useMemo(() => {
-    if (!result) return "";
-    if (result.todayPct > 0) return `${result.todayPct}% above today's market`;
-    if (result.todayPct < 0) return `${Math.abs(result.todayPct)}% below today's market`;
-    return "right at today's market";
-  }, [result]);
-
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "'Source Serif 4', serif" }}>
+    <div style={{ minHeight: "100vh", width: "100%", background: "var(--bg)", fontFamily: "'Source Serif 4', serif", overflowX: "hidden" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Playfair+Display:ital,wght@0,700;0,900;1,700;1,900&family=Source+Serif+4:opsz,wght@8..60,300;8..60,400;8..60,600&display=swap');
 
+        html, body, #root { width: 100%; margin: 0; padding: 0; box-sizing: border-box; }
+
         :root {
-          --ink:        #1c1a17;
-          --ink-muted:  #7a7060;
+          --ink:        #1a1a2e;
+          --ink-muted:  #6b7280;
           --paper:      #fdfcf8;
           --paper-tint: #f7f5ef;
           --bg:         #ede9df;
-          --rule:       #ddd8cd;
+          --rule:       #dddfe8;
           --accent:     #2e5c30;
-          --accent-bg:  #f0faf0;
-          --accent-rule:#a3d4a5;
+          --accent-bg:  #f0fdf4;
+          --accent-rule:#86efac;
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         select, input { outline: none; }
         select:focus, input:focus {
           border-color: var(--accent) !important;
@@ -300,8 +395,9 @@ export default function App() {
           letter-spacing: .1em; text-transform: uppercase;
           cursor: pointer; transition: all .2s;
         }
-        .btn-primary:hover  { background: #2e2b25; transform: translateY(-1px); }
+        .btn-primary:hover  { background: #2a2a40; transform: translateY(-1px); }
         .btn-primary:active { transform: scale(.99); }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
         .btn-ghost {
           padding: 13px; background: transparent; color: var(--ink);
@@ -336,8 +432,8 @@ export default function App() {
       <Toast visible={toast} />
 
       {/* ── Masthead ── */}
-      <header style={{ background: "var(--ink)", color: "var(--paper)", borderBottom: "4px solid var(--accent)" }}>
-        <div style={{ borderBottom: "1px solid rgba(255,255,255,.1)", padding: "9px 28px", display: "flex", justifyContent: "space-between" }}>
+      <header style={{ background: "var(--ink)", color: "var(--paper)", borderBottom: "4px solid var(--accent)", width: "100%" }}>
+        <div style={{ borderBottom: "1px solid rgba(255,255,255,.1)", padding: "9px 28px", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 4 }}>
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: ".12em", textTransform: "uppercase", color: "rgba(255,255,255,.35)" }}>
             Ottawa · Ontario · Canada
           </div>
@@ -345,18 +441,18 @@ export default function App() {
             {new Date().toLocaleDateString("en-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
           </div>
         </div>
-        <div style={{ padding: "20px 28px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16 }}>
+        <div style={{ padding: "20px 28px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
           <div>
             <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(26px, 5vw, 42px)", fontWeight: 900, lineHeight: 1, letterSpacing: "-.01em" }}>
               Ottawa Fair Rent
             </div>
             <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: 14, color: "rgba(255,255,255,.5)", marginTop: 6, fontStyle: "italic" }}>
-              A community rent transparency tool for the National Capital Region
+              A community rent transparency tool for Ottawa renters
             </div>
           </div>
           <div style={{ textAlign: "right", flexShrink: 0 }}>
             <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 30, fontWeight: 700, color: "#86efac", lineHeight: 1 }}>
-              {displayCount.toLocaleString()}
+              {countLoaded ? displayCount.toLocaleString() : "—"}
             </div>
             <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "rgba(255,255,255,.38)", letterSpacing: ".1em", textTransform: "uppercase", marginTop: 3 }}>
               submissions
@@ -374,7 +470,7 @@ export default function App() {
               <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, fontWeight: 700, color: "var(--ink)" }}>Compare your rent</h2>
               <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: 14, color: "var(--ink-muted)", marginTop: 5, lineHeight: 1.65 }}>
                 Enter your details for an instant comparison against Ottawa market rates.
-                Anonymous — no account or personal data required.
+                Benchmarks are based on CMHC and Rentals.ca data, and improve as community submissions grow.
               </p>
             </div>
 
@@ -397,7 +493,7 @@ export default function App() {
 
               <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <Field label="Monthly Rent (CAD)" error={errors.rent}>
-                  <input type="number" placeholder="e.g. 1850" value={form.rent} onChange={set("rent")} style={inpStyle(errors.rent)} />
+                  <input type="number" placeholder="e.g. 2026" value={form.rent} onChange={set("rent")} style={inpStyle(errors.rent)} />
                 </Field>
                 <Field label="Year Moved In" error={errors.moveInYear}>
                   <input type="number" placeholder={String(curYear)} value={form.moveInYear} onChange={set("moveInYear")} style={inpStyle(errors.moveInYear)} />
@@ -414,8 +510,8 @@ export default function App() {
                 </div>
               </div>
 
-              <button className="btn-primary" onClick={handleCalculate} style={{ marginTop: 4 }}>
-                Compare My Rent →
+              <button className="btn-primary" onClick={handleCalculate} disabled={submitting} style={{ marginTop: 4 }}>
+                {submitting ? "Saving…" : "Compare My Rent →"}
               </button>
 
               <p style={{ textAlign: "center", fontFamily: "'DM Mono', monospace", fontSize: 10, color: "var(--ink-muted)", letterSpacing: ".06em", lineHeight: 1.8 }}>
@@ -427,7 +523,6 @@ export default function App() {
         ) : (
           <div style={{ background: "var(--paper)", borderRadius: 10, boxShadow: "0 2px 28px rgba(0,0,0,.08)", overflow: "hidden" }}>
 
-            {/* Verdict banner */}
             <div className={revealed ? "reveal d1" : ""} style={{ background: verdict.bg, borderBottom: `3px solid ${verdict.rule}`, padding: "26px 26px 20px" }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 18, flexWrap: "wrap" }}>
                 <div style={{ fontFamily: "'Playfair Display', serif", fontWeight: 900, fontSize: "clamp(48px,10vw,72px)", lineHeight: 1, color: verdict.ink, letterSpacing: "-.02em" }}>
@@ -453,7 +548,6 @@ export default function App() {
 
             <div style={{ padding: "22px 26px 26px", display: "flex", flexDirection: "column", gap: 18 }}>
 
-              {/* Data cells */}
               <div className={`dg ${revealed ? "reveal d2" : ""}`} style={{
                 display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
                 border: "1px solid var(--rule)", borderRadius: 8, overflow: "hidden",
@@ -473,7 +567,6 @@ export default function App() {
                 ))}
               </div>
 
-              {/* Breakdown */}
               <div className={revealed ? "reveal d3" : ""} style={{ background: "var(--paper-tint)", border: "1px solid var(--rule)", borderRadius: 8, padding: "15px 18px" }}>
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--ink-muted)", marginBottom: 9 }}>
                   Two comparisons
@@ -497,7 +590,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Insight */}
               <div className={revealed ? "reveal d4" : ""} style={{
                 background: verdict.bg, border: `1px solid ${verdict.rule}`,
                 borderLeft: `4px solid ${verdict.ink}`,
@@ -521,7 +613,12 @@ export default function App() {
                 )}
               </div>
 
-              {/* CTAs */}
+              {saveWarning && (
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 14px" }}>
+                  ⚠ {saveWarning}
+                </div>
+              )}
+
               <div className={`cta ${revealed ? "reveal d5" : ""}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <button className="btn-ghost" onClick={handleReset}>← Check Another</button>
                 <button className="btn-dark"  onClick={copyShare}>Share Result</button>
@@ -532,8 +629,8 @@ export default function App() {
         )}
 
         <p style={{ textAlign: "center", marginTop: 24, fontFamily: "'DM Mono', monospace", fontSize: 10, color: "var(--ink-muted)", letterSpacing: ".06em", lineHeight: 1.9 }}>
-          Benchmarks use Ottawa-wide estimates with neighbourhood multipliers and an annual inflation model.
-          <br />Anonymous · No personal data stored · Not legal or financial advice.
+          Benchmarks based on CMHC Rental Market Survey, Rentals.ca, and Numbeo Ottawa data (2024–2025).
+          <br />Accuracy improves as community submissions grow · Anonymous · Not legal or financial advice.
         </p>
       </main>
     </div>

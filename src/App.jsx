@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -8,53 +8,56 @@ const supabase = createClient(
 
 const COOLDOWN_KEY = "ottawa_fair_rent_last_submit";
 const COOLDOWN_MS  = 60 * 1000;
+const CITY         = "ottawa";
+const MIN_RENT     = 500;
+const MAX_RENT     = 8000;
+const CUTOFF_YEARS = 2;
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
-// Base averages: CMHC Rental Market Survey Oct 2024 + Rentals.ca Feb 2025
 const BASE_AVERAGES = {
-  bachelor: 1550,
-  "1br":    2026,
-  "2br":    2530,
-  "3br":    3100,
-  "3plus":  3600,
+    "bachelor": 1550,
+    "1br": 2026,
+    "2br": 2530,
+    "3br": 3100,
+    "3plus": 3600
 };
 
 const HOOD_MULTIPLIERS = {
-  "Alta Vista":           0.95,
-  "Barrhaven":            0.92,
-  "Bayshore / Britannia": 0.96,
-  "Beacon Hill":          0.93,
-  "Blackburn Hamlet":     0.91,
-  "Byward Market":        1.18,
-  "Carlington":           0.88,
-  "Centretown":           1.08,
-  "Chinatown / Lebreton": 1.02,
-  "Downtown Core":        1.15,
-  "Elmvale Acres":        0.90,
-  "Findlay Creek":        0.89,
-  "Gatineau (QC side)":   0.82,
-  "Glebe":                1.20,
-  "Greenboro":            0.88,
-  "Hintonburg":           1.10,
-  "Kanata":               0.97,
-  "Little Italy":         1.07,
-  "Lowertown":            1.00,
-  "Manor Park":           1.06,
-  "Manotick":             0.94,
-  "Nepean":               0.93,
-  "New Edinburgh":        1.16,
-  "Old Ottawa South":     1.05,
-  "Orléans":              0.90,
-  "Overbrook":            0.90,
-  "Queensway Terrace":    0.94,
-  "Rideau-Vanier":        0.87,
-  "Riverside South":      0.91,
-  "Rockcliffe Park":      1.28,
-  "Sandy Hill":           1.04,
-  "Stittsville":          0.89,
-  "Vanier":               0.85,
-  "Wellington Village":   1.12,
-  "Westboro":             1.18,
+    "Alta Vista": 0.95,
+    "Barrhaven": 0.92,
+    "Bayshore / Britannia": 0.96,
+    "Beacon Hill": 0.93,
+    "Blackburn Hamlet": 0.91,
+    "Byward Market": 1.18,
+    "Carlington": 0.88,
+    "Centretown": 1.08,
+    "Chinatown / Lebreton": 1.02,
+    "Downtown Core": 1.15,
+    "Elmvale Acres": 0.9,
+    "Findlay Creek": 0.89,
+    "Gatineau (QC side)": 0.82,
+    "Glebe": 1.2,
+    "Greenboro": 0.88,
+    "Hintonburg": 1.1,
+    "Kanata": 0.97,
+    "Little Italy": 1.07,
+    "Lowertown": 1,
+    "Manor Park": 1.06,
+    "Manotick": 0.94,
+    "Nepean": 0.93,
+    "New Edinburgh": 1.16,
+    "Old Ottawa South": 1.05,
+    "Orléans": 0.9,
+    "Overbrook": 0.9,
+    "Queensway Terrace": 0.94,
+    "Rideau-Vanier": 0.87,
+    "Riverside South": 0.91,
+    "Rockcliffe Park": 1.28,
+    "Sandy Hill": 1.04,
+    "Stittsville": 0.89,
+    "Vanier": 0.85,
+    "Wellington Village": 1.12,
+    "Westboro": 1.18
 };
 
 const UNIT_TYPES = [
@@ -65,9 +68,48 @@ const UNIT_TYPES = [
   { label: "3+ Bedroom",        key: "3plus"    },
 ];
 
-const ADDON_COSTS     = { parking: 250, utilities: 120 };
+const ADDON_COSTS      = { parking: 250, utilities: 120 };
 const YEARLY_INFLATION = 0.038;
-const NEIGHBORHOODS   = Object.keys(HOOD_MULTIPLIERS).sort((a, b) => a.localeCompare(b));
+const NEIGHBORHOODS    = Object.keys(HOOD_MULTIPLIERS).sort((a, b) => a.localeCompare(b));
+
+// ─── Historical rent model ────────────────────────────────────────────────────
+// Returns what the market rate WAS in a given year for a neighbourhood/unit.
+// Uses compound deflation from today's baseline back to moveInYear.
+// This gives an accurate historical context for long-term tenants.
+function getHistoricalMarket(neighborhood, unitType, moveInYear, parking, utilities) {
+  const curYear  = new Date().getFullYear();
+  const base     = BASE_AVERAGES[unitType] || BASE_AVERAGES["1br"];
+  const mult     = HOOD_MULTIPLIERS[neighborhood] || 1;
+  const addons   = (parking ? ADDON_COSTS.parking : 0) + (utilities ? ADDON_COSTS.utilities : 0);
+  const yearsAgo = Math.max(0, curYear - moveInYear);
+
+  const todayBaseline  = Math.round(base * mult) + addons;
+  const moveinBaseline = Math.round(base * mult * Math.pow(1 - YEARLY_INFLATION, yearsAgo)) + addons;
+
+  // Expected rent today if inflation-tracked perfectly from move-in
+  const inflationTracked = Math.round(moveinBaseline * Math.pow(1 + YEARLY_INFLATION, yearsAgo));
+
+  return { today: todayBaseline, movein: moveinBaseline, inflationTracked };
+}
+
+// ─── Smart weighted benchmark ─────────────────────────────────────────────────
+// Blends CMHC baseline with community median.
+// Weight on community data scales with submission count.
+// Never exceeds 80% community (baseline always anchors).
+function communityWeight(n) {
+  if (n < 5)  return 0.00;
+  if (n < 10) return 0.20;
+  if (n < 20) return 0.40;
+  if (n < 50) return 0.60;
+  return 0.80;
+}
+
+function median(arr) {
+  if (!arr.length) return null;
+  const s = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const currency = (v) =>
@@ -76,22 +118,10 @@ const currency = (v) =>
 const pctDiff = (actual, bench) =>
   !bench ? 0 : Math.round(((actual - bench) / bench) * 100);
 
-function getMarket(neighborhood, unitType, moveInYear, parking, utilities) {
-  const base     = BASE_AVERAGES[unitType] || 2026;
-  const mult     = HOOD_MULTIPLIERS[neighborhood] || 1;
-  const curYear  = new Date().getFullYear();
-  const yearsAgo = Math.max(0, curYear - (moveInYear || curYear));
-  const addons   = (parking ? ADDON_COSTS.parking : 0) + (utilities ? ADDON_COSTS.utilities : 0);
-  return {
-    today:  Math.round(base * mult) + addons,
-    movein: Math.round(base * mult * Math.pow(1 - YEARLY_INFLATION, yearsAgo)) + addons,
-  };
-}
-
 function getVerdict(pct) {
   if (pct >  20) return { label: "Well Above Market", color: "#dc2626", bg: "#fef2f2", border: "#fecaca", pill: "#fee2e2" };
   if (pct >   5) return { label: "Above Market",      color: "#ea580c", bg: "#fff7ed", border: "#fed7aa", pill: "#ffedd5" };
-  if (pct >=  -5) return { label: "At Market Rate",   color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0", pill: "#dcfce7" };
+  if (pct >= -5) return { label: "At Market Rate",    color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0", pill: "#dcfce7" };
   if (pct >= -15) return { label: "Below Market",     color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe", pill: "#dbeafe" };
   return               { label: "Well Below Market",  color: "#7c3aed", bg: "#faf5ff", border: "#ddd6fe", pill: "#ede9fe" };
 }
@@ -131,32 +161,85 @@ function useCountUp(target, duration = 1000) {
 export default function App() {
   const curYear = new Date().getFullYear();
 
-  const [form,        setForm]        = useState({ neighborhood: "", unitType: "", rent: "", moveInYear: "" });
-  const [parking,     setParking]     = useState(false);
-  const [utilities,   setUtilities]   = useState(false);
-  const [errors,      setErrors]      = useState({});
-  const [result,      setResult]      = useState(null);
-  const [submitting,  setSubmitting]  = useState(false);
-  const [saveWarning, setSaveWarning] = useState("");
-  const [realCount,   setRealCount]   = useState(0);
-  const [countLoaded, setCountLoaded] = useState(false);
-  const [shareOpen,   setShareOpen]   = useState(false);
-  const [copied,      setCopied]      = useState(false);
-  const [revealed,    setRevealed]    = useState(false);
+  const [form,           setForm]           = useState({ neighborhood: "", unitType: "", rent: "", moveInYear: "" });
+  const [parking,        setParking]        = useState(false);
+  const [utilities,      setUtilities]      = useState(false);
+  const [errors,         setErrors]         = useState({});
+  const [result,         setResult]         = useState(null);
+  const [submitting,     setSubmitting]     = useState(false);
+  const [saveWarning,    setSaveWarning]    = useState("");
+  const [realCount,      setRealCount]      = useState(0);
+  const [countLoaded,    setCountLoaded]    = useState(false);
+  const [shareOpen,      setShareOpen]      = useState(false);
+  const [copied,         setCopied]         = useState(false);
+  const [revealed,       setRevealed]       = useState(false);
+  // Smart benchmark state
+  const [smartBenchmark, setSmartBenchmark] = useState(null);
+  const [benchSource,    setBenchSource]    = useState("baseline");
+  const [communityCount, setCommunityCount] = useState(0);
   const copyRef = useRef(null);
 
   const displayCount = useCountUp(countLoaded ? realCount : 0);
 
+  // Fetch total submission count for this city
   useEffect(() => {
     supabase
       .from("rent_submissions")
       .select("*", { count: "exact", head: true })
-      .eq("city", "ottawa")
+      .eq("city", CITY)
       .then(({ count, error }) => {
         if (!error) setRealCount(count || 0);
         setCountLoaded(true);
       });
   }, []);
+
+  // Fetch community submissions for smart blending
+  // Runs whenever neighborhood or unitType changes
+  useEffect(() => {
+    const { neighborhood, unitType } = form;
+    if (!neighborhood || !unitType) {
+      setSmartBenchmark(null);
+      setBenchSource("baseline");
+      setCommunityCount(0);
+      return;
+    }
+
+    const curYear = new Date().getFullYear();
+    const cutoff  = new Date();
+    cutoff.setFullYear(curYear - CUTOFF_YEARS);
+
+    supabase
+      .from("rent_submissions")
+      .select("monthly_rent")
+      .eq("city", CITY)
+      .eq("neighborhood", neighborhood)
+      .eq("unit_type", unitType)
+      .gte("monthly_rent", MIN_RENT)
+      .lte("monthly_rent", MAX_RENT)
+      .gte("created_at", cutoff.toISOString())
+      .then(({ data, error }) => {
+        const baseline = Math.round((BASE_AVERAGES[unitType] || BASE_AVERAGES["1br"]) * (HOOD_MULTIPLIERS[neighborhood] || 1));
+        if (error || !data || data.length === 0) {
+          setSmartBenchmark(baseline);
+          setBenchSource("baseline");
+          setCommunityCount(0);
+          return;
+        }
+        const rents = data.map(r => r.monthly_rent);
+        const med   = median(rents);
+        const n     = rents.length;
+        const w     = communityWeight(n);
+        setCommunityCount(n);
+        if (w === 0) {
+          setSmartBenchmark(baseline);
+          setBenchSource("baseline");
+        } else {
+          const blended = Math.round(baseline * (1 - w) + med * w);
+          setSmartBenchmark(blended);
+          setBenchSource(w >= 0.6 ? "community" : "blended");
+        }
+      });
+  }, [form.neighborhood, form.unitType]);
 
   useEffect(() => {
     if (result) setTimeout(() => setRevealed(true), 40);
@@ -183,15 +266,27 @@ export default function App() {
 
     const rent       = +form.rent;
     const moveInYear = +form.moveInYear;
-    const { today, movein } = getMarket(form.neighborhood, form.unitType, moveInYear, parking, utilities);
+    const addons     = (parking ? ADDON_COSTS.parking : 0) + (utilities ? ADDON_COSTS.utilities : 0);
+    const { today: todayBaseline, movein, inflationTracked } = getHistoricalMarket(form.neighborhood, form.unitType, moveInYear, parking, utilities);
     const sameYear = moveInYear === curYear;
 
+    // Use smart blended benchmark for today comparison (add addons back)
+    const todayBench  = smartBenchmark != null ? (smartBenchmark + addons) : todayBaseline;
+    const moveinBench = sameYear ? todayBench : movein;
+
     setResult({
-      rent, today, movein, sameYear,
-      todayPct:   pctDiff(rent, today),
-      moveinPct:  pctDiff(rent, sameYear ? today : movein),
-      todayDiff:  rent - today,
-      moveinDiff: rent - (sameYear ? today : movein),
+      rent,
+      todayBench,
+      moveinBench,
+      inflationTracked,
+      sameYear,
+      todayPct:        pctDiff(rent, todayBench),
+      moveinPct:       pctDiff(rent, moveinBench),
+      todayDiff:       rent - todayBench,
+      moveinDiff:      rent - moveinBench,
+      benchSource,
+      communityCount,
+      moveInYear,
     });
 
     try {
@@ -201,7 +296,7 @@ export default function App() {
           neighborhood: form.neighborhood, unit_type: form.unitType,
           monthly_rent: rent, move_in_year: moveInYear,
           includes_parking: parking, includes_utilities: utilities,
-          city: "ottawa",
+          city: CITY,
         });
         if (!error) {
           localStorage.setItem(COOLDOWN_KEY, String(Date.now()));
@@ -221,7 +316,7 @@ export default function App() {
 
   function getShareText() {
     const unit = UNIT_TYPES.find(u => u.key === form.unitType)?.label?.toLowerCase() || "unit";
-    return `Ottawa Rent Calculator: I'm paying ${result.todayPct > 0 ? "+" : ""}${result.todayPct}% vs market for a ${unit} in ${form.neighborhood}. ottawafairrent.ca`;
+    return `Ottawa Rent Calculator: I'm paying ${result.todayPct > 0 ? "+" : ""}${result.todayPct}% vs market for a ${unit} in ${form.neighborhood}. https://ottawafairrent.ca`;
   }
 
   function copyLink() {
@@ -235,6 +330,12 @@ export default function App() {
   const verdict = result ? getVerdict(result.todayPct) : null;
   const insight = result ? getInsight(result.todayPct, +form.moveInYear) : null;
 
+  const benchLabel = benchSource === "community"
+    ? `Community data · ${communityCount} submissions`
+    : benchSource === "blended"
+    ? `Blended · ${communityCount} submissions + CMHC`
+    : "CMHC baseline";
+
   const inp = (err) => ({
     width: "100%", padding: "11px 14px",
     border: `1.5px solid ${err ? "#ef4444" : "#e2e8f0"}`,
@@ -247,7 +348,7 @@ export default function App() {
   const sel = (err) => ({
     ...inp(err),
     paddingRight: 36,
-    backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")",
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`,
     backgroundRepeat: "no-repeat", backgroundPosition: "right 13px center",
     cursor: "pointer",
   });
@@ -255,7 +356,7 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif", color: "#0f172a" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
         html, body, #root { width: 100%; margin: 0; padding: 0; }
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         input, select { font-family: inherit; }
@@ -298,15 +399,17 @@ export default function App() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 0", gap: 16 }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-                <div style={{ width: 28, height: 28, background: "#22c55e", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 800, color: "#0f172a" }}>FR</span>
-                </div>
-                <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 800, color: "#fff", letterSpacing: "-.02em" }}>
+                <a href="https://fairrent.ca" style={{ textDecoration: "none" }}>
+                  <div style={{ width: 28, height: 28, background: "#22c55e", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: "#0f172a" }}>FR</span>
+                  </div>
+                </a>
+                <span style={{ fontSize: 18, fontWeight: 800, color: "#fff", letterSpacing: "-.02em" }}>
                   Ottawa Rent Calculator
                 </span>
               </div>
-              <p style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, color: "#64748b", margin: 0 }}>
-                See if your rent is fair — free, anonymous, no account needed
+              <p style={{ fontSize: 12, color: "#64748b", margin: 0 }}>
+                See if your Ottawa rent is fair — free, anonymous, no account needed
               </p>
             </div>
             <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -327,10 +430,9 @@ export default function App() {
         {!result ? (
           <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,.06)", overflow: "hidden" }}>
 
-            {/* Form header */}
             <div style={{ padding: "22px 24px 20px", borderBottom: "1px solid #f1f5f9" }}>
-              <h1 style={{ fontFamily: "'Inter', sans-serif", fontSize: 20, fontWeight: 800, color: "#0f172a", letterSpacing: "-.02em", marginBottom: 6 }}>
-                Compare your rent to market rates
+              <h1 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", letterSpacing: "-.02em", marginBottom: 6 }}>
+                Compare your Ottawa rent to market rates
               </h1>
               <p style={{ fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>
                 Based on CMHC and Rentals.ca data for Ottawa. Your submission improves accuracy for everyone.
@@ -339,7 +441,6 @@ export default function App() {
 
             <div style={{ padding: "22px 24px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
 
-              {/* Row 1 */}
               <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                   <label style={{ fontSize: 11, fontWeight: 600, color: "#475569", letterSpacing: ".04em", textTransform: "uppercase" }}>Neighbourhood</label>
@@ -359,11 +460,27 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Row 2 */}
+              {/* Smart benchmark preview — shows once neighbourhood + unit selected */}
+              {form.neighborhood && form.unitType && smartBenchmark != null && (
+                <div style={{ padding: "10px 14px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#64748b" }}>
+                    Current benchmark
+                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14, fontWeight: 500, color: "#0f172a" }}>
+                      {currency(smartBenchmark + (parking ? ADDON_COSTS.parking : 0) + (utilities ? ADDON_COSTS.utilities : 0))}/mo
+                    </span>
+                    <span style={{ padding: "2px 8px", background: benchSource === "baseline" ? "#f1f5f9" : "#22c55e20", border: `1px solid ${benchSource === "baseline" ? "#e2e8f0" : "#22c55e50"}`, borderRadius: 100, fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: benchSource === "baseline" ? "#94a3b8" : "#16a34a", textTransform: "uppercase", letterSpacing: ".06em" }}>
+                      {benchLabel}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                   <label style={{ fontSize: 11, fontWeight: 600, color: "#475569", letterSpacing: ".04em", textTransform: "uppercase" }}>Monthly Rent (CAD)</label>
-                  <input type="number" placeholder="e.g. 2026" value={form.rent} onChange={set("rent")} style={inp(errors.rent)} />
+                  <input type="number" placeholder="e.g. 2200" value={form.rent} onChange={set("rent")} style={inp(errors.rent)} />
                   {errors.rent && <span style={{ fontSize: 11, color: "#ef4444" }}>{errors.rent}</span>}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
@@ -373,7 +490,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Toggles */}
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8 }}>Rent includes</div>
                 <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -410,12 +526,12 @@ export default function App() {
 
             {/* ── Verdict banner ── */}
             <div className={revealed ? "fade-in d1" : ""} style={{ background: verdict.bg, border: `1.5px solid ${verdict.border}`, borderRadius: 12, padding: "28px 24px 22px" }}>
-              <div style={{ display: "flex", align: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 600, color: verdict.color, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8, opacity: .8 }}>
                     vs today's market · {form.neighborhood}
                   </div>
-                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "clamp(52px,12vw,80px)", fontWeight: 800, lineHeight: 1, color: verdict.color, letterSpacing: "-.03em" }}>
+                  <div style={{ fontSize: "clamp(52px,12vw,80px)", fontWeight: 800, lineHeight: 1, color: verdict.color, letterSpacing: "-.03em" }}>
                     {result.todayPct > 0 ? "+" : ""}{result.todayPct}%
                   </div>
                 </div>
@@ -426,7 +542,7 @@ export default function App() {
 
               {/* Spectrum bar */}
               <div style={{ marginTop: 20 }}>
-                <div style={{ position: "relative", height: 5, borderRadius: 5, background: `linear-gradient(to right, #7c3aed, #2563eb, #16a34a, #ea580c, #dc2626)` }}>
+                <div style={{ position: "relative", height: 5, borderRadius: 5, background: "linear-gradient(to right, #7c3aed, #2563eb, #16a34a, #ea580c, #dc2626)" }}>
                   <div style={{
                     position: "absolute", top: "50%",
                     left: `${((Math.max(-50, Math.min(50, result.todayPct)) + 50) / 100) * 100}%`,
@@ -441,18 +557,26 @@ export default function App() {
                   <span>−50%</span><span>Market</span><span>+50%</span>
                 </div>
               </div>
+
+              {/* Benchmark source pill */}
+              <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#94a3b8" }}>Benchmark: </span>
+                <span style={{ padding: "2px 8px", background: result.benchSource === "baseline" ? "#f1f5f9" : "#22c55e20", border: `1px solid ${result.benchSource === "baseline" ? "#e2e8f0" : "#22c55e50"}`, borderRadius: 100, fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: result.benchSource === "baseline" ? "#94a3b8" : "#16a34a", textTransform: "uppercase", letterSpacing: ".06em" }}>
+                  {result.benchSource === "community" ? `Community data · ${result.communityCount} submissions` : result.benchSource === "blended" ? `Blended · ${result.communityCount} submissions + CMHC` : "CMHC baseline"}
+                </span>
+              </div>
             </div>
 
             {/* ── Stats row ── */}
             <div className={`grid-3 ${revealed ? "fade-in d2" : ""}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
               {[
                 { label: "Your Rent", value: currency(result.rent), highlight: true },
-                { label: result.sameYear ? "Market (Now)" : "Move-in Market", value: currency(result.movein) },
-                { label: "Today's Market", value: currency(result.today) },
+                { label: result.sameYear ? "Market (Now)" : "Move-in Market", value: currency(result.moveinBench) },
+                { label: "Today's Market", value: currency(result.todayBench) },
               ].map(({ label, value, highlight }) => (
                 <div key={label} className="stat-card">
                   <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>{label}</div>
-                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: highlight ? 22 : 18, fontWeight: 800, color: highlight ? "#0f172a" : "#475569", letterSpacing: "-.02em" }}>{value}</div>
+                  <div style={{ fontSize: highlight ? 22 : 18, fontWeight: 800, color: highlight ? "#0f172a" : "#475569", letterSpacing: "-.02em" }}>{value}</div>
                 </div>
               ))}
             </div>
@@ -466,13 +590,19 @@ export default function App() {
                 ) : (
                   <>
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f1f5f9" }}>
-                      <span style={{ color: "#64748b" }}>When you moved in</span>
+                      <span style={{ color: "#64748b" }}>When you moved in ({result.moveInYear})</span>
                       <span style={{ fontWeight: 600, color: result.moveinDiff > 0 ? "#ea580c" : "#16a34a" }}>{result.moveinPct > 0 ? "+" : ""}{result.moveinPct}% · {currency(Math.abs(result.moveinDiff))}/mo {result.moveinDiff >= 0 ? "above" : "below"}</span>
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
-                      <span style={{ color: "#64748b" }}>Today</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f1f5f9" }}>
+                      <span style={{ color: "#64748b" }}>Today's market</span>
                       <span style={{ fontWeight: 600, color: result.todayDiff > 0 ? "#ea580c" : "#16a34a" }}>{result.todayPct > 0 ? "+" : ""}{result.todayPct}% · {currency(Math.abs(result.todayDiff))}/mo {result.todayDiff >= 0 ? "above" : "below"}</span>
                     </div>
+                    {!result.sameYear && (
+                      <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
+                        <span style={{ color: "#64748b" }}>If inflation-tracked from move-in</span>
+                        <span style={{ fontWeight: 600, color: "#475569" }}>{currency(result.inflationTracked)}/mo expected</span>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -534,7 +664,9 @@ export default function App() {
             ))}
           </div>
           <p style={{ marginTop: 12, fontSize: 11, color: "#94a3b8", lineHeight: 1.7 }}>
-            Benchmarks use neighbourhood-level multipliers applied to city-wide averages. Accuracy improves as community submissions grow. Not legal or financial advice.
+            Benchmarks blend CMHC/Rentals.ca baselines with anonymous community submissions from the past 2 years.
+            Historical figures use a 3.8%/year inflation model from today's baseline.
+            Accuracy improves as community submissions grow. Not legal or financial advice.
           </p>
         </div>
       </main>

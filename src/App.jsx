@@ -255,7 +255,7 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif", color: "#0f172a" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
         html, body, #root { width: 100%; margin: 0; padding: 0; }
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         input, select { font-family: inherit; }
@@ -299,9 +299,9 @@ export default function App() {
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
                 <div style={{ width: 28, height: 28, background: "#22c55e", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 800, color: "#0f172a" }}>FR</span>
+                  <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 800, color: "#0f172a" }}>FR</span>
                 </div>
-                <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 800, color: "#fff", letterSpacing: "-.02em" }}>
+                <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 18, fontWeight: 800, color: "#fff", letterSpacing: "-.02em" }}>
                   Ottawa Rent Calculator
                 </span>
               </div>
@@ -329,7 +329,7 @@ export default function App() {
 
             {/* Form header */}
             <div style={{ padding: "22px 24px 20px", borderBottom: "1px solid #f1f5f9" }}>
-              <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: "#0f172a", letterSpacing: "-.02em", marginBottom: 6 }}>
+              <h1 style={{ fontFamily: "'Inter', sans-serif", fontSize: 20, fontWeight: 800, color: "#0f172a", letterSpacing: "-.02em", marginBottom: 6 }}>
                 Compare your rent to market rates
               </h1>
               <p style={{ fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>
@@ -415,7 +415,7 @@ export default function App() {
                   <div style={{ fontSize: 11, fontWeight: 600, color: verdict.color, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8, opacity: .8 }}>
                     vs today's market · {form.neighborhood}
                   </div>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontSize: "clamp(52px,12vw,80px)", fontWeight: 800, lineHeight: 1, color: verdict.color, letterSpacing: "-.03em" }}>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: "clamp(52px,12vw,80px)", fontWeight: 800, lineHeight: 1, color: verdict.color, letterSpacing: "-.03em" }}>
                     {result.todayPct > 0 ? "+" : ""}{result.todayPct}%
                   </div>
                 </div>
@@ -452,7 +452,7 @@ export default function App() {
               ].map(({ label, value, highlight }) => (
                 <div key={label} className="stat-card">
                   <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>{label}</div>
-                  <div style={{ fontFamily: "'Syne', sans-serif", fontSize: highlight ? 22 : 18, fontWeight: 800, color: highlight ? "#0f172a" : "#475569", letterSpacing: "-.02em" }}>{value}</div>
+                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: highlight ? 22 : 18, fontWeight: 800, color: highlight ? "#0f172a" : "#475569", letterSpacing: "-.02em" }}>{value}</div>
                 </div>
               ))}
             </div>

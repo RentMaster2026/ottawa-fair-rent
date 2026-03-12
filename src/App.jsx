@@ -1,8 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// ─── Supabase ─────────────────────────────────────────────────────────────────
-
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -12,12 +10,7 @@ const COOLDOWN_KEY = "ottawa_fair_rent_last_submit";
 const COOLDOWN_MS  = 60 * 1000;
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
-// Base averages sourced from CMHC Rental Market Survey (Ottawa CMA, Oct 2024),
-// Rentals.ca Monthly Rent Report (Feb 2025), and Numbeo Ottawa 2025.
-// 1BR: ~$2,026 (CMHC/Rentals.ca avg), 2BR: ~$2,530, bachelor: ~$1,550 (CMHC)
-// 3BR estimated from CMHC trend data. These are CMA-wide averages before
-// neighbourhood multipliers are applied.
-
+// Base averages: CMHC Rental Market Survey Oct 2024 + Rentals.ca Feb 2025
 const BASE_AVERAGES = {
   bachelor: 1550,
   "1br":    2026,
@@ -26,9 +19,6 @@ const BASE_AVERAGES = {
   "3plus":  3600,
 };
 
-// Neighbourhood multipliers derived from Rentals.ca, Zumper, Apartments.com,
-// and CMHC zone data for Ottawa 2024–2025. Multiplier of 1.00 = CMA average.
-// All neighbourhoods sorted alphabetically in the UI dropdown.
 const HOOD_MULTIPLIERS = {
   "Alta Vista":           0.95,
   "Barrhaven":            0.92,
@@ -47,11 +37,12 @@ const HOOD_MULTIPLIERS = {
   "Greenboro":            0.88,
   "Hintonburg":           1.10,
   "Kanata":               0.97,
+  "Little Italy":         1.07,
   "Lowertown":            1.00,
   "Manor Park":           1.06,
   "Manotick":             0.94,
-  "New Edinburgh":        1.16,
   "Nepean":               0.93,
+  "New Edinburgh":        1.16,
   "Old Ottawa South":     1.05,
   "Orléans":              0.90,
   "Overbrook":            0.90,
@@ -64,7 +55,6 @@ const HOOD_MULTIPLIERS = {
   "Vanier":               0.85,
   "Wellington Village":   1.12,
   "Westboro":             1.18,
-  "Little Italy":         1.07,
 };
 
 const UNIT_TYPES = [
@@ -75,14 +65,11 @@ const UNIT_TYPES = [
   { label: "3+ Bedroom",        key: "3plus"    },
 ];
 
-const ADDON_COSTS    = { parking: 250, utilities: 120 };
-const YEARLY_INFLATION = 0.038; // Ottawa rent growth avg ~3.5–4% per CMHC
-
-// Sorted neighbourhood list for dropdown
-const NEIGHBORHOODS = Object.keys(HOOD_MULTIPLIERS).sort((a, b) => a.localeCompare(b));
+const ADDON_COSTS     = { parking: 250, utilities: 120 };
+const YEARLY_INFLATION = 0.038;
+const NEIGHBORHOODS   = Object.keys(HOOD_MULTIPLIERS).sort((a, b) => a.localeCompare(b));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
 const currency = (v) =>
   v.toLocaleString("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 });
 
@@ -102,25 +89,23 @@ function getMarket(neighborhood, unitType, moveInYear, parking, utilities) {
 }
 
 function getVerdict(pct) {
-  if (pct >  20) return { label: "Well Above Market", ink: "#b91c1c", bg: "#fef2f2", rule: "#fca5a5" };
-  if (pct >   5) return { label: "Above Market",      ink: "#c2410c", bg: "#fff7ed", rule: "#fdba74" };
-  if (pct >=  -5) return { label: "At Market Rate",   ink: "#15803d", bg: "#f0fdf4", rule: "#86efac" };
-  if (pct >= -15) return { label: "Below Market",     ink: "#1d4ed8", bg: "#eff6ff", rule: "#93c5fd" };
-  return              { label: "Well Below Market",   ink: "#6d28d9", bg: "#faf5ff", rule: "#c4b5fd" };
+  if (pct >  20) return { label: "Well Above Market", color: "#dc2626", bg: "#fef2f2", border: "#fecaca", pill: "#fee2e2" };
+  if (pct >   5) return { label: "Above Market",      color: "#ea580c", bg: "#fff7ed", border: "#fed7aa", pill: "#ffedd5" };
+  if (pct >=  -5) return { label: "At Market Rate",   color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0", pill: "#dcfce7" };
+  if (pct >= -15) return { label: "Below Market",     color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe", pill: "#dbeafe" };
+  return               { label: "Well Below Market",  color: "#7c3aed", bg: "#faf5ff", border: "#ddd6fe", pill: "#ede9fe" };
 }
 
 function getInsight(pct, moveInYear) {
   const age = new Date().getFullYear() - (moveInYear || new Date().getFullYear());
-  if (pct > 20)   return { head: "You may be significantly overpaying.", body: "Annual rent increases in Ontario are capped by the provincial rent increase guideline (2.5% for 2024, 2.5% for 2025). If your landlord has increased your rent beyond the guideline without an above-guideline application, you may have grounds to challenge it at the Landlord and Tenant Board.", link: { t: "Ontario Rent Increase Guidelines", u: "https://www.ontario.ca/page/rent-increase-guideline" } };
-  if (pct > 5)    return { head: "Slightly above market.", body: "Premium amenities, included parking or utilities, newer construction, or a particularly walkable location can justify above-market rents. Review what's included in your lease before drawing conclusions.", link: null };
-  if (pct >= -5)  return { head: "You're right at market rate.", body: "Your rent aligns well with Ottawa averages for this unit type and neighbourhood. This is a useful baseline heading into your next lease renewal conversation.", link: null };
-  if (pct >= -15) return { head: age > 3 ? "A solid deal — likely thanks to tenancy protections." : "You're paying below market.", body: "Long-term Ontario tenants benefit from rent increases capped below market inflation. This advantage compounds over time — know your rights before your next renewal.", link: { t: "Tenant Rights in Ontario", u: "https://www.ontario.ca/page/renting-ontario-your-rights" } };
-  return { head: "You have a notably strong deal.", body: "You're well below today's Ottawa market. Protect this tenancy — be cautious about voluntary moves, and understand that any new lease would be priced at current market rates.", link: { t: "Before You Move: Know Your Rights", u: "https://www.ontario.ca/page/renting-ontario-your-rights" } };
+  if (pct > 20)   return { head: "You may be significantly overpaying.", body: "Ontario caps annual rent increases (2.5% for 2024–2025). If your landlord exceeded this without an above-guideline application, you may have grounds to challenge it.", link: { t: "Ontario Rent Increase Guidelines →", u: "https://www.ontario.ca/page/rent-increase-guideline" } };
+  if (pct > 5)    return { head: "Slightly above market.", body: "Included parking, utilities, newer construction, or a premium location can justify higher rents. Review what's included before drawing conclusions.", link: null };
+  if (pct >= -5)  return { head: "You're at market rate.", body: "Your rent aligns with Ottawa averages for this unit and neighbourhood — a useful baseline heading into your next renewal conversation.", link: null };
+  if (pct >= -15) return { head: age > 3 ? "A solid deal, likely thanks to rent protections." : "You're paying below market.", body: "Ontario tenants benefit from rent increase caps. This advantage compounds over time — know your rights before your next renewal.", link: { t: "Tenant Rights in Ontario →", u: "https://www.ontario.ca/page/renting-ontario-your-rights" } };
+  return { head: "You have a strong deal.", body: "You're well below today's Ottawa market. Protect this tenancy — voluntary moves reset your rent to current market rates.", link: { t: "Before You Move: Know Your Rights →", u: "https://www.ontario.ca/page/renting-ontario-your-rights" } };
 }
 
-// ─── Animated counter ─────────────────────────────────────────────────────────
-
-function useCountUp(target, duration = 1100) {
+function useCountUp(target, duration = 1000) {
   const [val, setVal] = useState(0);
   const raf  = useRef(null);
   const prev = useRef(0);
@@ -142,112 +127,7 @@ function useCountUp(target, duration = 1100) {
   return val;
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function Field({ label, error, children }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-      <label style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--ink-muted)" }}>
-        {label}
-      </label>
-      {children}
-      {error && <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#b91c1c" }}>{error}</span>}
-    </div>
-  );
-}
-
-const selStyle = (err) => ({
-  padding: "10px 36px 10px 12px",
-  border: `1.5px solid ${err ? "#b91c1c" : "var(--rule)"}`,
-  borderRadius: 6, fontSize: 15,
-  fontFamily: "'Source Serif 4', serif",
-  background: "var(--paper)", color: "var(--ink)", width: "100%",
-  appearance: "none",
-  backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")",
-  backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center",
-  cursor: "pointer", transition: "border-color .18s, box-shadow .18s",
-});
-
-const inpStyle = (err) => ({
-  padding: "10px 12px",
-  border: `1.5px solid ${err ? "#b91c1c" : "var(--rule)"}`,
-  borderRadius: 6, fontSize: 15,
-  fontFamily: "'Source Serif 4', serif",
-  background: "var(--paper)", color: "var(--ink)", width: "100%",
-  transition: "border-color .18s, box-shadow .18s",
-});
-
-function ToggleChip({ label, sub, checked, onChange }) {
-  return (
-    <label style={{
-      display: "flex", alignItems: "center", gap: 10, padding: "11px 14px",
-      border: `1.5px solid ${checked ? "var(--accent-rule)" : "var(--rule)"}`,
-      borderRadius: 8, cursor: "pointer", userSelect: "none",
-      background: checked ? "var(--accent-bg)" : "var(--paper-tint)",
-      transition: "all .18s",
-    }}>
-      <div style={{
-        width: 36, height: 20, borderRadius: 20, position: "relative", flexShrink: 0,
-        background: checked ? "var(--accent)" : "#d1d5db", transition: "background .18s",
-      }}>
-        <div style={{
-          position: "absolute", top: 3, left: checked ? 19 : 3,
-          width: 14, height: 14, borderRadius: "50%",
-          background: "white", boxShadow: "0 1px 4px rgba(0,0,0,.2)",
-          transition: "left .18s",
-        }} />
-        <input type="checkbox" checked={checked} onChange={onChange}
-          style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
-      </div>
-      <div>
-        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--ink)" }}>{label}</div>
-        <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: 12, color: "var(--ink-muted)", marginTop: 1 }}>{sub}</div>
-      </div>
-    </label>
-  );
-}
-
-function Meter({ pct }) {
-  const clamped = Math.max(-50, Math.min(50, pct));
-  const pos = ((clamped + 50) / 100) * 100;
-  const { ink } = getVerdict(pct);
-  return (
-    <div style={{ margin: "22px 0 10px" }}>
-      <div style={{ position: "relative", height: 6, borderRadius: 6, background: "linear-gradient(to right,#6d28d9,#1d4ed8,#15803d,#c2410c,#b91c1c)" }}>
-        <div style={{
-          position: "absolute", top: "50%", left: `${pos}%`,
-          transform: "translate(-50%,-50%)",
-          width: 20, height: 20, borderRadius: "50%",
-          background: ink, border: "3px solid white",
-          boxShadow: `0 2px 10px ${ink}55`,
-          transition: "left .85s cubic-bezier(.34,1.56,.64,1)",
-        }} />
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "'DM Mono', monospace", fontSize: 10, color: "var(--ink-muted)", marginTop: 7 }}>
-        <span>−50%</span><span>Market Rate</span><span>+50%</span>
-      </div>
-    </div>
-  );
-}
-
-function Toast({ visible }) {
-  return (
-    <div style={{
-      position: "fixed", bottom: 28, left: "50%",
-      transform: `translateX(-50%) translateY(${visible ? 0 : 14}px)`,
-      opacity: visible ? 1 : 0, transition: "all .3s cubic-bezier(.34,1.56,.64,1)",
-      background: "var(--ink)", color: "var(--paper)",
-      padding: "11px 22px", borderRadius: 100,
-      fontFamily: "'DM Mono', monospace", fontSize: 12, letterSpacing: ".06em",
-      boxShadow: "0 8px 30px rgba(0,0,0,.22)", pointerEvents: "none", zIndex: 9999,
-    }}>
-      ✓ &nbsp;Copied to clipboard
-    </div>
-  );
-}
-
 // ─── App ──────────────────────────────────────────────────────────────────────
-
 export default function App() {
   const curYear = new Date().getFullYear();
 
@@ -256,16 +136,16 @@ export default function App() {
   const [utilities,   setUtilities]   = useState(false);
   const [errors,      setErrors]      = useState({});
   const [result,      setResult]      = useState(null);
-  const [revealed,    setRevealed]    = useState(false);
-  const [toast,       setToast]       = useState(false);
   const [submitting,  setSubmitting]  = useState(false);
   const [saveWarning, setSaveWarning] = useState("");
   const [realCount,   setRealCount]   = useState(0);
   const [countLoaded, setCountLoaded] = useState(false);
+  const [shareOpen,   setShareOpen]   = useState(false);
+  const [copied,      setCopied]      = useState(false);
+  const [revealed,    setRevealed]    = useState(false);
+  const copyRef = useRef(null);
 
-  const displayCount = useCountUp(countLoaded ? realCount : 0, 1200);
-  const toastRef = useRef(null);
-  const [shareOpen, setShareOpen] = useState(false);
+  const displayCount = useCountUp(countLoaded ? realCount : 0);
 
   useEffect(() => {
     supabase
@@ -279,17 +159,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (result) setTimeout(() => setRevealed(true), 60);
+    if (result) setTimeout(() => setRevealed(true), 40);
     else setRevealed(false);
   }, [result]);
 
   function validate() {
     const e = {};
-    if (!form.neighborhood) e.neighborhood = "Required";
-    if (!form.unitType)     e.unitType     = "Required";
-    if (!form.rent || isNaN(+form.rent) || +form.rent < 300) e.rent = "Enter a valid monthly rent (min $300)";
+    if (!form.neighborhood) e.neighborhood = "Select a neighbourhood";
+    if (!form.unitType)     e.unitType     = "Select a unit type";
+    if (!form.rent || isNaN(+form.rent) || +form.rent < 300) e.rent = "Enter a valid monthly rent";
     const yr = +form.moveInYear;
-    if (!form.moveInYear || yr < 1980 || yr > curYear) e.moveInYear = `Enter a year 1980–${curYear}`;
+    if (!form.moveInYear || yr < 1980 || yr > curYear) e.moveInYear = `Enter a year between 1980–${curYear}`;
     return e;
   }
 
@@ -299,6 +179,7 @@ export default function App() {
     setErrors({});
     setSaveWarning("");
     setSubmitting(true);
+    setShareOpen(false);
 
     const rent       = +form.rent;
     const moveInYear = +form.moveInYear;
@@ -315,363 +196,347 @@ export default function App() {
 
     try {
       const lastSubmit = Number(localStorage.getItem(COOLDOWN_KEY) || 0);
-      const onCooldown = Date.now() - lastSubmit < COOLDOWN_MS;
-
-      if (!onCooldown) {
+      if (Date.now() - lastSubmit >= COOLDOWN_MS) {
         const { error } = await supabase.from("rent_submissions").insert({
-          neighborhood:       form.neighborhood,
-          unit_type:          form.unitType,
-          monthly_rent:       rent,
-          move_in_year:       moveInYear,
-          includes_parking:   parking,
-          includes_utilities: utilities,
-          city:               "ottawa",
+          neighborhood: form.neighborhood, unit_type: form.unitType,
+          monthly_rent: rent, move_in_year: moveInYear,
+          includes_parking: parking, includes_utilities: utilities,
+          city: "ottawa",
         });
-
         if (!error) {
           localStorage.setItem(COOLDOWN_KEY, String(Date.now()));
           setRealCount(prev => prev + 1);
-        } else {
-          setSaveWarning("Result shown, but your submission wasn't saved.");
-        }
+        } else setSaveWarning("Result shown — submission not saved.");
       }
-    } catch {
-      setSaveWarning("Result shown, but your submission wasn't saved.");
-    } finally {
-      setSubmitting(false);
-    }
+    } catch { setSaveWarning("Result shown — submission not saved."); }
+    finally  { setSubmitting(false); }
   }
 
   function handleReset() {
     setResult(null);
     setForm({ neighborhood: "", unitType: "", rent: "", moveInYear: "" });
     setParking(false); setUtilities(false);
-    setErrors({}); setSaveWarning("");
+    setErrors({}); setSaveWarning(""); setShareOpen(false);
   }
 
   function getShareText() {
     const unit = UNIT_TYPES.find(u => u.key === form.unitType)?.label?.toLowerCase() || "unit";
-    return `Ottawa Fair Rent: I'm paying ${result.todayPct > 0 ? "+" : ""}${result.todayPct}% vs today's market for a ${unit} in ${form.neighborhood}. ottawafairrent.ca`;
+    return `Ottawa Rent Calculator: I'm paying ${result.todayPct > 0 ? "+" : ""}${result.todayPct}% vs market for a ${unit} in ${form.neighborhood}. ottawafairrent.ca`;
   }
 
   function copyLink() {
-    navigator.clipboard?.writeText('https://ottawafairrent.ca');
-    setToast(true);
-    clearTimeout(toastRef.current);
-    toastRef.current = setTimeout(() => setToast(false), 2800);
-  }
-
-  function nativeShare() {
-    const unit = UNIT_TYPES.find(u => u.key === form.unitType)?.label?.toLowerCase() || "unit";
-    if (navigator.share) {
-      navigator.share({
-        title: 'Ottawa Fair Rent',
-        text: getShareText(),
-        url: 'https://ottawafairrent.ca',
-      }).catch(() => {});
-    }
+    navigator.clipboard?.writeText("https://ottawafairrent.ca");
+    setCopied(true);
+    clearTimeout(copyRef.current);
+    copyRef.current = setTimeout(() => setCopied(false), 2000);
   }
 
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
   const verdict = result ? getVerdict(result.todayPct) : null;
   const insight = result ? getInsight(result.todayPct, +form.moveInYear) : null;
 
+  const inp = (err) => ({
+    width: "100%", padding: "11px 14px",
+    border: `1.5px solid ${err ? "#ef4444" : "#e2e8f0"}`,
+    borderRadius: 8, fontSize: 15, fontFamily: "inherit",
+    background: "#fff", color: "#0f172a",
+    outline: "none", transition: "border-color .15s, box-shadow .15s",
+    appearance: "none",
+  });
+
+  const sel = (err) => ({
+    ...inp(err),
+    paddingRight: 36,
+    backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")",
+    backgroundRepeat: "no-repeat", backgroundPosition: "right 13px center",
+    cursor: "pointer",
+  });
+
   return (
-    <div style={{ minHeight: "100vh", width: "100%", background: "var(--bg)", fontFamily: "'Source Serif 4', serif", overflowX: "hidden" }}>
+    <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif", color: "#0f172a" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Playfair+Display:ital,wght@0,700;0,900;1,700;1,900&family=Source+Serif+4:opsz,wght@8..60,300;8..60,400;8..60,600&display=swap');
-
-        html, body, #root { width: 100%; margin: 0; padding: 0; box-sizing: border-box; }
-
-        :root {
-          --ink:        #1a1a2e;
-          --ink-muted:  #6b7280;
-          --paper:      #fdfcf8;
-          --paper-tint: #f7f5ef;
-          --bg:         #ede9df;
-          --rule:       #dddfe8;
-          --accent:     #2e5c30;
-          --accent-bg:  #f0fdf4;
-          --accent-rule:#86efac;
-        }
-
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+        html, body, #root { width: 100%; margin: 0; padding: 0; }
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        select, input { outline: none; }
-        select:focus, input:focus {
-          border-color: var(--accent) !important;
-          box-shadow: 0 0 0 3px rgba(46,92,48,.13) !important;
-        }
+        input, select { font-family: inherit; }
+        input:focus, select:focus { border-color: #3b82f6 !important; box-shadow: 0 0 0 3px rgba(59,130,246,.15) !important; outline: none; }
+        input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
 
-        .btn-primary {
-          width: 100%; padding: 15px; background: var(--ink); color: var(--paper);
-          border: none; border-radius: 6px;
-          font-family: 'DM Mono', monospace; font-size: 13px;
-          letter-spacing: .1em; text-transform: uppercase;
-          cursor: pointer; transition: all .2s;
-        }
-        .btn-primary:hover  { background: #2a2a40; transform: translateY(-1px); }
+        .fade-in { opacity: 0; transform: translateY(10px); animation: fadeUp .4s ease forwards; }
+        @keyframes fadeUp { to { opacity: 1; transform: none; } }
+        .d1 { animation-delay: .05s; } .d2 { animation-delay: .1s; }
+        .d3 { animation-delay: .15s; } .d4 { animation-delay: .2s; }
+        .d5 { animation-delay: .25s; }
+
+        .btn-primary { width: 100%; padding: 13px; background: #0f172a; color: #fff; border: none; border-radius: 8px; font-family: inherit; font-size: 14px; font-weight: 600; letter-spacing: .02em; cursor: pointer; transition: background .15s, transform .1s; }
+        .btn-primary:hover:not(:disabled) { background: #1e293b; }
         .btn-primary:active { transform: scale(.99); }
-        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 
-        .btn-ghost {
-          padding: 13px; background: transparent; color: var(--ink);
-          border: 1.5px solid var(--rule); border-radius: 6px;
-          font-family: 'DM Mono', monospace; font-size: 12px;
-          letter-spacing: .08em; text-transform: uppercase;
-          cursor: pointer; transition: all .2s;
-        }
-        .btn-ghost:hover { border-color: var(--ink); transform: translateY(-1px); }
+        .btn-outline { padding: 11px 18px; background: #fff; color: #0f172a; border: 1.5px solid #e2e8f0; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: border-color .15s, background .15s; }
+        .btn-outline:hover { border-color: #94a3b8; background: #f8fafc; }
 
-        .btn-dark {
-          padding: 13px; background: var(--ink); color: var(--paper); border: none;
-          border-radius: 6px; font-family: 'DM Mono', monospace; font-size: 12px;
-          letter-spacing: .08em; text-transform: uppercase;
-          cursor: pointer; transition: all .2s;
-        }
-        .btn-dark:hover { opacity: .88; transform: translateY(-1px); }
+        .toggle { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1.5px solid #e2e8f0; border-radius: 8px; cursor: pointer; user-select: none; transition: border-color .15s, background .15s; }
+        .toggle.on { border-color: #bfdbfe; background: #eff6ff; }
+        .toggle-track { width: 34px; height: 18px; border-radius: 18px; position: relative; flex-shrink: 0; transition: background .15s; }
+        .toggle-thumb { position: absolute; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: left .15s; }
 
-        .reveal { opacity: 0; transform: translateY(12px); animation: revUp .5s cubic-bezier(.34,1.2,.64,1) forwards; }
-        @keyframes revUp { to { opacity: 1; transform: translateY(0); } }
-        .d1 { animation-delay: .04s; }
-        .d2 { animation-delay: .11s; }
-        .d3 { animation-delay: .18s; }
-        .d4 { animation-delay: .25s; }
-        .d5 { animation-delay: .32s; }
+        .share-btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; border-radius: 7px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; text-decoration: none; cursor: pointer; border: none; transition: opacity .15s, transform .1s; }
+        .share-btn:hover { opacity: .88; transform: translateY(-1px); }
 
-        @media (max-width: 580px) {
-          .g2, .dg, .cta { grid-template-columns: 1fr !important; }
+        .stat-card { text-align: center; padding: 16px 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; }
+
+        @media (max-width: 600px) {
+          .grid-2, .grid-3, .grid-share { grid-template-columns: 1fr !important; }
+          .cta-row { grid-template-columns: 1fr !important; }
         }
       `}</style>
 
-      <Toast visible={toast} />
-
-      {/* ── Masthead ── */}
-      <header style={{ background: "var(--ink)", color: "var(--paper)", borderBottom: "4px solid var(--accent)", width: "100%" }}>
-        <div style={{ borderBottom: "1px solid rgba(255,255,255,.1)", padding: "9px 28px", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 4 }}>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: ".12em", textTransform: "uppercase", color: "rgba(255,255,255,.35)" }}>
-            Ottawa · Ontario · Canada
-          </div>
-          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "rgba(255,255,255,.35)", letterSpacing: ".06em" }}>
-            {new Date().toLocaleDateString("en-CA", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-          </div>
-        </div>
-        <div style={{ padding: "20px 28px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: "clamp(26px, 5vw, 42px)", fontWeight: 900, lineHeight: 1, letterSpacing: "-.01em" }}>
-              Ottawa Fair Rent
+      {/* ── Header ── */}
+      <header style={{ background: "#0f172a", borderBottom: "1px solid #1e293b" }}>
+        <div style={{ maxWidth: 680, margin: "0 auto", padding: "0 20px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 0", gap: 16 }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                <div style={{ width: 28, height: 28, background: "#22c55e", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 800, color: "#0f172a" }}>FR</span>
+                </div>
+                <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 800, color: "#fff", letterSpacing: "-.02em" }}>
+                  Ottawa Rent Calculator
+                </span>
+              </div>
+              <p style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, color: "#64748b", margin: 0 }}>
+                See if your rent is fair — free, anonymous, no account needed
+              </p>
             </div>
-            <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: 14, color: "rgba(255,255,255,.5)", marginTop: 6, fontStyle: "italic" }}>
-              A community rent transparency tool for Ottawa renters
-            </div>
-          </div>
-          <div style={{ textAlign: "right", flexShrink: 0 }}>
-            <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 30, fontWeight: 700, color: "#86efac", lineHeight: 1 }}>
-              {countLoaded ? displayCount.toLocaleString() : "—"}
-            </div>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "rgba(255,255,255,.38)", letterSpacing: ".1em", textTransform: "uppercase", marginTop: 3 }}>
-              submissions
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 22, fontWeight: 500, color: "#22c55e", lineHeight: 1 }}>
+                {countLoaded ? displayCount.toLocaleString() : "—"}
+              </div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#475569", marginTop: 3, letterSpacing: ".06em", textTransform: "uppercase" }}>
+                submissions
+              </div>
             </div>
           </div>
         </div>
       </header>
 
       {/* ── Main ── */}
-      <main style={{ maxWidth: 700, margin: "0 auto", padding: "32px 20px 72px" }}>
+      <main style={{ maxWidth: 680, margin: "0 auto", padding: "32px 20px 80px" }}>
 
         {!result ? (
-          <div style={{ background: "var(--paper)", borderRadius: 10, boxShadow: "0 2px 28px rgba(0,0,0,.08)", overflow: "hidden" }}>
-            <div style={{ padding: "22px 26px 18px", borderBottom: "1px solid var(--rule)" }}>
-              <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, fontWeight: 700, color: "var(--ink)" }}>Compare your rent</h2>
-              <p style={{ fontFamily: "'Source Serif 4', serif", fontSize: 14, color: "var(--ink-muted)", marginTop: 5, lineHeight: 1.65 }}>
-                Enter your details for an instant comparison against Ottawa market rates.
-                Benchmarks are based on CMHC and Rentals.ca data, and improve as community submissions grow.
+          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,.06)", overflow: "hidden" }}>
+
+            {/* Form header */}
+            <div style={{ padding: "22px 24px 20px", borderBottom: "1px solid #f1f5f9" }}>
+              <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: "#0f172a", letterSpacing: "-.02em", marginBottom: 6 }}>
+                Compare your rent to market rates
+              </h1>
+              <p style={{ fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>
+                Based on CMHC and Rentals.ca data for Ottawa. Your submission improves accuracy for everyone.
               </p>
             </div>
 
-            <div style={{ padding: "22px 26px 26px", display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ padding: "22px 24px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
 
-              <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <Field label="Neighbourhood" error={errors.neighborhood}>
-                  <select value={form.neighborhood} onChange={set("neighborhood")} style={selStyle(errors.neighborhood)}>
+              {/* Row 1 */}
+              <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "#475569", letterSpacing: ".04em", textTransform: "uppercase" }}>Neighbourhood</label>
+                  <select value={form.neighborhood} onChange={set("neighborhood")} style={sel(errors.neighborhood)}>
                     <option value="">Select…</option>
                     {NEIGHBORHOODS.map(n => <option key={n} value={n}>{n}</option>)}
                   </select>
-                </Field>
-                <Field label="Unit Type" error={errors.unitType}>
-                  <select value={form.unitType} onChange={set("unitType")} style={selStyle(errors.unitType)}>
+                  {errors.neighborhood && <span style={{ fontSize: 11, color: "#ef4444" }}>{errors.neighborhood}</span>}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "#475569", letterSpacing: ".04em", textTransform: "uppercase" }}>Unit Type</label>
+                  <select value={form.unitType} onChange={set("unitType")} style={sel(errors.unitType)}>
                     <option value="">Select…</option>
                     {UNIT_TYPES.map(u => <option key={u.key} value={u.key}>{u.label}</option>)}
                   </select>
-                </Field>
+                  {errors.unitType && <span style={{ fontSize: 11, color: "#ef4444" }}>{errors.unitType}</span>}
+                </div>
               </div>
 
-              <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <Field label="Monthly Rent (CAD)" error={errors.rent}>
-                  <input type="number" placeholder="e.g. 2026" value={form.rent} onChange={set("rent")} style={inpStyle(errors.rent)} />
-                </Field>
-                <Field label="Year Moved In" error={errors.moveInYear}>
-                  <input type="number" placeholder={String(curYear)} value={form.moveInYear} onChange={set("moveInYear")} style={inpStyle(errors.moveInYear)} />
-                </Field>
+              {/* Row 2 */}
+              <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "#475569", letterSpacing: ".04em", textTransform: "uppercase" }}>Monthly Rent (CAD)</label>
+                  <input type="number" placeholder="e.g. 2026" value={form.rent} onChange={set("rent")} style={inp(errors.rent)} />
+                  {errors.rent && <span style={{ fontSize: 11, color: "#ef4444" }}>{errors.rent}</span>}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: "#475569", letterSpacing: ".04em", textTransform: "uppercase" }}>Year Moved In</label>
+                  <input type="number" placeholder={String(curYear)} value={form.moveInYear} onChange={set("moveInYear")} style={inp(errors.moveInYear)} />
+                  {errors.moveInYear && <span style={{ fontSize: 11, color: "#ef4444" }}>{errors.moveInYear}</span>}
+                </div>
               </div>
 
+              {/* Toggles */}
               <div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--ink-muted)", marginBottom: 9 }}>
-                  Does your rent include…
-                </div>
-                <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  <ToggleChip label="Parking"   sub="+$250/mo to benchmark" checked={parking}   onChange={e => setParking(e.target.checked)}   />
-                  <ToggleChip label="Utilities" sub="+$120/mo to benchmark" checked={utilities} onChange={e => setUtilities(e.target.checked)} />
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#475569", letterSpacing: ".04em", textTransform: "uppercase", marginBottom: 8 }}>Rent includes</div>
+                <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  {[
+                    { label: "Parking", sub: "+$250/mo to benchmark", key: "parking", val: parking, set: setParking },
+                    { label: "Utilities", sub: "+$120/mo to benchmark", key: "util", val: utilities, set: setUtilities },
+                  ].map(({ label, sub, key, val, set: setter }) => (
+                    <label key={key} className={`toggle ${val ? "on" : ""}`} onClick={() => setter(v => !v)}>
+                      <div className="toggle-track" style={{ background: val ? "#3b82f6" : "#e2e8f0" }}>
+                        <div className="toggle-thumb" style={{ left: val ? 18 : 2 }} />
+                        <input type="checkbox" checked={val} onChange={() => {}} style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{label}</div>
+                        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>{sub}</div>
+                      </div>
+                    </label>
+                  ))}
                 </div>
               </div>
 
-              <button className="btn-primary" onClick={handleCalculate} disabled={submitting} style={{ marginTop: 4 }}>
+              <button className="btn-primary" onClick={handleCalculate} disabled={submitting}>
                 {submitting ? "Saving…" : "Compare My Rent →"}
               </button>
 
-              <p style={{ textAlign: "center", fontFamily: "'DM Mono', monospace", fontSize: 10, color: "var(--ink-muted)", letterSpacing: ".06em", lineHeight: 1.8 }}>
+              <p style={{ textAlign: "center", fontSize: 11, color: "#94a3b8", lineHeight: 1.7 }}>
                 Anonymous · No account required · No personal data collected
               </p>
             </div>
           </div>
 
         ) : (
-          <div style={{ background: "var(--paper)", borderRadius: 10, boxShadow: "0 2px 28px rgba(0,0,0,.08)", overflow: "hidden" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
-            <div className={revealed ? "reveal d1" : ""} style={{ background: verdict.bg, borderBottom: `3px solid ${verdict.rule}`, padding: "26px 26px 20px" }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 18, flexWrap: "wrap" }}>
-                <div style={{ fontFamily: "'Playfair Display', serif", fontWeight: 900, fontSize: "clamp(48px,10vw,72px)", lineHeight: 1, color: verdict.ink, letterSpacing: "-.02em" }}>
-                  {result.todayPct > 0 ? "+" : ""}{result.todayPct}%
-                </div>
+            {/* ── Verdict banner ── */}
+            <div className={revealed ? "fade-in d1" : ""} style={{ background: verdict.bg, border: `1.5px solid ${verdict.border}`, borderRadius: 12, padding: "28px 24px 22px" }}>
+              <div style={{ display: "flex", align: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
                 <div>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", color: verdict.ink, opacity: .65, marginBottom: 5 }}>
-                    vs today's market
+                  <div style={{ fontSize: 11, fontWeight: 600, color: verdict.color, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8, opacity: .8 }}>
+                    vs today's market · {form.neighborhood}
                   </div>
-                  <div style={{
-                    display: "inline-flex", alignItems: "center", gap: 7,
-                    background: `${verdict.ink}14`, border: `1.5px solid ${verdict.rule}`,
-                    borderRadius: 100, padding: "5px 14px",
-                    fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 600, color: verdict.ink,
-                    letterSpacing: ".04em",
-                  }}>
-                    {verdict.label}
+                  <div style={{ fontFamily: "'Syne', sans-serif", fontSize: "clamp(52px,12vw,80px)", fontWeight: 800, lineHeight: 1, color: verdict.color, letterSpacing: "-.03em" }}>
+                    {result.todayPct > 0 ? "+" : ""}{result.todayPct}%
                   </div>
+                </div>
+                <div style={{ display: "inline-flex", alignItems: "center", padding: "7px 14px", background: verdict.pill, border: `1px solid ${verdict.border}`, borderRadius: 100, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, fontWeight: 500, color: verdict.color, letterSpacing: ".02em", alignSelf: "flex-start", marginTop: 4 }}>
+                  {verdict.label}
                 </div>
               </div>
-              <Meter pct={result.todayPct} />
+
+              {/* Spectrum bar */}
+              <div style={{ marginTop: 20 }}>
+                <div style={{ position: "relative", height: 5, borderRadius: 5, background: `linear-gradient(to right, #7c3aed, #2563eb, #16a34a, #ea580c, #dc2626)` }}>
+                  <div style={{
+                    position: "absolute", top: "50%",
+                    left: `${((Math.max(-50, Math.min(50, result.todayPct)) + 50) / 100) * 100}%`,
+                    transform: "translate(-50%, -50%)",
+                    width: 16, height: 16, borderRadius: "50%",
+                    background: verdict.color, border: "2.5px solid #fff",
+                    boxShadow: `0 0 0 2px ${verdict.color}40`,
+                    transition: "left .8s cubic-bezier(.34,1.3,.64,1)",
+                  }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#94a3b8" }}>
+                  <span>−50%</span><span>Market</span><span>+50%</span>
+                </div>
+              </div>
             </div>
 
-            <div style={{ padding: "22px 26px 26px", display: "flex", flexDirection: "column", gap: 18 }}>
-
-              <div className={`dg ${revealed ? "reveal d2" : ""}`} style={{
-                display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
-                border: "1px solid var(--rule)", borderRadius: 8, overflow: "hidden",
-              }}>
-                {[
-                  { label: "Your Rent",      value: currency(result.rent)   },
-                  { label: result.sameYear ? "Market (Now)" : "Move-in Market", value: currency(result.movein) },
-                  { label: "Today's Market", value: currency(result.today)  },
-                ].map(({ label, value }, i) => (
-                  <div key={label} style={{
-                    textAlign: "center", padding: "12px 8px",
-                    borderRight: i < 2 ? "1px solid var(--rule)" : "none",
-                  }}>
-                    <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "var(--ink-muted)", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 5 }}>{label}</div>
-                    <div style={{ fontFamily: "'Playfair Display', serif", fontSize: i === 0 ? 22 : 18, fontWeight: 700, color: "var(--ink)" }}>{value}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div className={revealed ? "reveal d3" : ""} style={{ background: "var(--paper-tint)", border: "1px solid var(--rule)", borderRadius: 8, padding: "15px 18px" }}>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--ink-muted)", marginBottom: 9 }}>
-                  Two comparisons
+            {/* ── Stats row ── */}
+            <div className={`grid-3 ${revealed ? "fade-in d2" : ""}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+              {[
+                { label: "Your Rent", value: currency(result.rent), highlight: true },
+                { label: result.sameYear ? "Market (Now)" : "Move-in Market", value: currency(result.movein) },
+                { label: "Today's Market", value: currency(result.today) },
+              ].map(({ label, value, highlight }) => (
+                <div key={label} className="stat-card">
+                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>{label}</div>
+                  <div style={{ fontFamily: "'Syne', sans-serif", fontSize: highlight ? 22 : 18, fontWeight: 800, color: highlight ? "#0f172a" : "#475569", letterSpacing: "-.02em" }}>{value}</div>
                 </div>
-                <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: 14, color: "var(--ink)", lineHeight: 1.85 }}>
-                  {result.sameYear ? (
-                    <>You moved in this year, so the market reference is the same. Your rent is{" "}
-                      <strong>{currency(Math.abs(result.todayDiff))}/month {result.todayDiff >= 0 ? "above" : "below"} today's market.</strong>
-                    </>
+              ))}
+            </div>
+
+            {/* ── Breakdown ── */}
+            <div className={revealed ? "fade-in d3" : ""} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, padding: "16px 20px" }}>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 10 }}>Breakdown</div>
+              <div style={{ fontSize: 14, color: "#334155", lineHeight: 1.8 }}>
+                {result.sameYear ? (
+                  <>You moved in this year. Your rent is <strong style={{ color: "#0f172a" }}>{currency(Math.abs(result.todayDiff))}/month {result.todayDiff >= 0 ? "above" : "below"} today's market.</strong></>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f1f5f9" }}>
+                      <span style={{ color: "#64748b" }}>When you moved in</span>
+                      <span style={{ fontWeight: 600, color: result.moveinDiff > 0 ? "#ea580c" : "#16a34a" }}>{result.moveinPct > 0 ? "+" : ""}{result.moveinPct}% · {currency(Math.abs(result.moveinDiff))}/mo {result.moveinDiff >= 0 ? "above" : "below"}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
+                      <span style={{ color: "#64748b" }}>Today</span>
+                      <span style={{ fontWeight: 600, color: result.todayDiff > 0 ? "#ea580c" : "#16a34a" }}>{result.todayPct > 0 ? "+" : ""}{result.todayPct}% · {currency(Math.abs(result.todayDiff))}/mo {result.todayDiff >= 0 ? "above" : "below"}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* ── Insight ── */}
+            <div className={revealed ? "fade-in d4" : ""} style={{ background: "#fff", borderLeft: `3px solid ${verdict.color}`, border: `1px solid ${verdict.border}`, borderLeftWidth: 3, borderRadius: 10, padding: "16px 20px" }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: "#0f172a", marginBottom: 6 }}>{insight.head}</div>
+              <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.7 }}>{insight.body}</div>
+              {insight.link && (
+                <a href={insight.link.u} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", marginTop: 10, fontSize: 12, fontWeight: 600, color: verdict.color, textDecoration: "none" }}>
+                  {insight.link.t}
+                </a>
+              )}
+            </div>
+
+            {saveWarning && (
+              <div style={{ fontSize: 12, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 14px" }}>⚠ {saveWarning}</div>
+            )}
+
+            {/* ── CTA row ── */}
+            <div className={`cta-row ${revealed ? "fade-in d5" : ""}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <button className="btn-outline" onClick={handleReset}>← Check Another</button>
+              <button
+                className="btn-outline"
+                onClick={() => setShareOpen(s => !s)}
+                style={{ background: shareOpen ? "#0f172a" : "#fff", color: shareOpen ? "#fff" : "#0f172a", borderColor: shareOpen ? "#0f172a" : "#e2e8f0" }}
+              >
+                Share Result {shareOpen ? "↑" : "↗"}
+              </button>
+            </div>
+
+            {/* ── Share panel ── */}
+            {shareOpen && (
+              <div className="fade-in" style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, padding: "16px 18px" }}>
+                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 12 }}>Share your result</div>
+                <div className="grid-share" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
+                  <a className="share-btn" href={`https://www.reddit.com/submit?url=https://ottawafairrent.ca&title=${encodeURIComponent(getShareText())}`} target="_blank" rel="noopener noreferrer" style={{ background: "#ff4500", color: "#fff" }}>Reddit</a>
+                  <a className="share-btn" href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(getShareText())}`} target="_blank" rel="noopener noreferrer" style={{ background: "#000", color: "#fff" }}>X</a>
+                  <a className="share-btn" href={`https://www.threads.net/intent/post?text=${encodeURIComponent(getShareText())}`} target="_blank" rel="noopener noreferrer" style={{ background: "#000", color: "#fff" }}>Threads</a>
+                  {navigator.share ? (
+                    <button className="share-btn" onClick={() => navigator.share({ title: "Ottawa Rent Calculator", text: getShareText(), url: "https://ottawafairrent.ca" }).catch(() => {})} style={{ background: "#0f172a", color: "#fff" }}>More ↗</button>
                   ) : (
-                    <>
-                      <strong>When you moved in:</strong>{" "}
-                      {result.moveinPct > 0 ? "+" : ""}{result.moveinPct}% vs market
-                      {" · "}{currency(Math.abs(result.moveinDiff))}/month {result.moveinDiff >= 0 ? "above" : "below"} the move-in market.
-                      <br />
-                      <strong>Today:</strong>{" "}
-                      {result.todayPct > 0 ? "+" : ""}{result.todayPct}% vs market
-                      {" · "}{currency(Math.abs(result.todayDiff))}/month {result.todayDiff >= 0 ? "above" : "below"} today's market.
-                    </>
+                    <button className="share-btn" onClick={copyLink} style={{ background: copied ? "#16a34a" : "#0f172a", color: "#fff" }}>{copied ? "Copied ✓" : "Copy"}</button>
                   )}
                 </div>
               </div>
+            )}
 
-              <div className={revealed ? "reveal d4" : ""} style={{
-                background: verdict.bg, border: `1px solid ${verdict.rule}`,
-                borderLeft: `4px solid ${verdict.ink}`,
-                borderRadius: 8, padding: "15px 18px",
-              }}>
-                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 700, fontStyle: "italic", color: verdict.ink, marginBottom: 7 }}>
-                  {insight.head}
-                </div>
-                <div style={{ fontFamily: "'Source Serif 4', serif", fontSize: 14, color: "#374151", lineHeight: 1.75 }}>
-                  {insight.body}
-                </div>
-                {insight.link && (
-                  <a href={insight.link.u} target="_blank" rel="noopener noreferrer" style={{
-                    display: "inline-block", marginTop: 10,
-                    fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: ".05em",
-                    color: verdict.ink, textDecoration: "none",
-                    borderBottom: `1px solid ${verdict.ink}40`, paddingBottom: 1,
-                  }}>
-                    {insight.link.t} →
-                  </a>
-                )}
-              </div>
-
-              {saveWarning && (
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 14px" }}>
-                  ⚠ {saveWarning}
-                </div>
-              )}
-
-              <div className={`cta ${revealed ? "reveal d5" : ""}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <button className="btn-ghost" onClick={handleReset}>← Check Another</button>
-                <button className="btn-dark" onClick={() => setShareOpen(s => !s)}>Share Result ↗</button>
-              </div>
-
-              {shareOpen && (
-                <div style={{ background: "var(--paper-tint)", border: "1px solid var(--rule)", borderRadius: 10, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--ink-muted)", marginBottom: 2 }}>Share your result</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <a href={`https://www.reddit.com/submit?url=https://ottawafairrent.ca&title=${encodeURIComponent(getShareText())}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px", background: "#ff4500", color: "white", borderRadius: 7, fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, textDecoration: "none", letterSpacing: ".04em" }}>
-                      Reddit
-                    </a>
-                    <a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(getShareText())}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px", background: "#000", color: "white", borderRadius: 7, fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, textDecoration: "none", letterSpacing: ".04em" }}>
-                      X / Twitter
-                    </a>
-                    <a href={`https://www.threads.net/intent/post?text=${encodeURIComponent(getShareText())}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px", background: "#000", color: "white", borderRadius: 7, fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, textDecoration: "none", letterSpacing: ".04em" }}>
-                      Threads
-                    </a>
-                    {navigator.share ? (
-                      <button onClick={nativeShare} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px", background: "var(--ink)", color: "white", border: "none", borderRadius: 7, fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, cursor: "pointer", letterSpacing: ".04em" }}>
-                        More ↗
-                      </button>
-                    ) : (
-                      <button onClick={copyLink} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px", background: "var(--ink)", color: "white", border: "none", borderRadius: 7, fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, cursor: "pointer", letterSpacing: ".04em" }}>
-                        Copy Link
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-            </div>
           </div>
         )}
 
-        <p style={{ textAlign: "center", marginTop: 24, fontFamily: "'DM Mono', monospace", fontSize: 10, color: "var(--ink-muted)", letterSpacing: ".06em", lineHeight: 1.9 }}>
-          Benchmarks based on CMHC Rental Market Survey, Rentals.ca, and Numbeo Ottawa data (2024–2025).
-          <br />Accuracy improves as community submissions grow · Anonymous · Not legal or financial advice.
-        </p>
+        {/* ── Data sources footer ── */}
+        <div style={{ marginTop: 36, padding: "20px 0", borderTop: "1px solid #e2e8f0" }}>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 12 }}>Data Sources</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {["CMHC Rental Market Survey (Oct 2024)", "Rentals.ca Monthly Report (Feb 2025)", "Community Submissions"].map(s => (
+              <span key={s} style={{ display: "inline-block", padding: "4px 10px", background: "#f1f5f9", borderRadius: 100, fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#64748b" }}>{s}</span>
+            ))}
+          </div>
+          <p style={{ marginTop: 12, fontSize: 11, color: "#94a3b8", lineHeight: 1.7 }}>
+            Benchmarks use neighbourhood-level multipliers applied to city-wide averages. Accuracy improves as community submissions grow. Not legal or financial advice.
+          </p>
+        </div>
       </main>
     </div>
   );

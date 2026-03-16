@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+import { createClient } from "@supabase/supabase-js";
 import NeighbourhoodPage from "./NeighbourhoodPage";
 import { OTTAWA_HOODS, OTTAWA_CITY } from "./hoodData";
-import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -134,7 +134,7 @@ const CSS = [
   ".opt-btn.on{border-color:#bbf7d0;background:#f0fdf4;color:#16a34a;font-weight:600;}",
   ".btn-primary{width:100%;padding:13px;background:var(--t1);color:#fff;border:none;border-radius:var(--r-md);font-size:14px;font-weight:600;cursor:pointer;transition:background .15s;letter-spacing:.01em;}",
   ".btn-primary:hover:not(:disabled){background:#1e293b;}",
-  ".btn-primary:disabled{opacity:.4;cursor:not-allowed;}",
+  ".btn-primary:disabled{opacity:.4;cursor:not-allowed;}.btn-primary:focus-visible,.btn-ghost:focus-visible,.opt-btn:focus-visible,.toggle-btn:focus-visible{outline:2px solid #16a34a;outline-offset:2px;}",
   ".btn-ghost{padding:11px 20px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r-md);color:var(--t2);font-size:13px;font-weight:600;cursor:pointer;transition:border-color .15s,color .15s;}",
   ".btn-ghost:hover{border-color:var(--border-mid);color:var(--t1);}",
   ".share-btn{display:flex;align-items:center;justify-content:center;padding:9px 12px;border-radius:var(--r-sm);font-family:var(--mono);font-size:11px;font-weight:500;text-decoration:none;cursor:pointer;border:none;letter-spacing:.03em;transition:opacity .15s;}",
@@ -149,6 +149,7 @@ const CSS = [
   "@keyframes fu{to{opacity:1;transform:none;}}",
   ".d1{animation-delay:.04s}.d2{animation-delay:.09s}.d3{animation-delay:.14s}.d4{animation-delay:.19s}.d5{animation-delay:.24s}.d6{animation-delay:.29s}.d7{animation-delay:.34s}",
   "@media(max-width:580px){.g2{grid-template-columns:1fr!important}.g3{grid-template-columns:1fr 1fr!important}.gcta{grid-template-columns:1fr!important}.gshare{grid-template-columns:1fr 1fr!important}}"
+  "@media(prefers-reduced-motion:reduce){.fade-up{animation:none!important;opacity:1!important;transform:none!important;}*{transition-duration:.01ms!important;}}",
 ].join("\n");
 
 // ─── Result page ─────────────────────────────────────────────────────────────
@@ -564,13 +565,15 @@ export default function App() {
   const benchLabel = communityN>=20 ? "Community data ("+communityN+" submissions)"
     : communityN>=5 ? "Blended — "+communityN+" submissions + CMHC"
     : "CMHC baseline";
-if (showHood) return (
-  <NeighbourhoodPage
-    hood={OTTAWA_HOODS[showHood]}
-    city={OTTAWA_CITY}
-    onBack={() => { setShowHood(null); window.scrollTo(0,0); }}
-  />
-);
+
+  if (showHood) return (
+    <NeighbourhoodPage
+      hood={OTTAWA_HOODS[showHood]}
+      city={OTTAWA_CITY}
+      onBack={() => { setShowHood(null); window.scrollTo(0,0); }}
+    />
+  );
+
   return (
     <><style>{CSS}</style>
     <div style={{minHeight:"100vh"}}>
@@ -586,7 +589,7 @@ if (showHood) return (
           {countLoaded&&(
             <div style={{display:"flex",alignItems:"center",gap:7}}>
               <div className="live-dot"/>
-              <span style={{fontFamily:"var(--mono)",fontSize:11,color:"rgba(255,255,255,.35)",letterSpacing:".04em"}}>{displayCount.toLocaleString()} submissions</span>
+              <span aria-live="polite" style={{fontFamily:"var(--mono)",fontSize:11,color:"rgba(255,255,255,.35)",letterSpacing:".04em"}}>{displayCount.toLocaleString()} submissions</span>
             </div>
           )}
         </div>
@@ -595,13 +598,26 @@ if (showHood) return (
       <main style={{maxWidth:"var(--max)",margin:"0 auto",padding:"40px 20px 80px"}}>
         {!result ? (
           <>
-            <div style={{marginBottom:32}}>
+            <div style={{marginBottom:24}}>
               <h1 style={{fontFamily:"var(--serif)",fontSize:"clamp(26px,4.5vw,40px)",fontWeight:400,lineHeight:1.15,letterSpacing:"-.02em",marginBottom:12,color:"var(--t1)"}}>
                 Is your Ottawa rent<br/><span style={{fontStyle:"italic",color:ACCENT}}>actually fair?</span>
               </h1>
               <p style={{fontSize:15,color:"var(--t2)",lineHeight:1.7,maxWidth:440}}>
                 Compare your rent to neighbourhood-level market data from CMHC and local renter data. Anonymous. Takes 30 seconds.
               </p>
+            </div>
+
+            <div style={{marginBottom:28}}>
+              <div style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--t3)",textTransform:"uppercase",letterSpacing:".1em",marginBottom:12}}>Browse by neighbourhood</div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {Object.keys(OTTAWA_HOODS).map(slug=>(
+                  <button key={slug} onClick={()=>setShowHood(slug)} style={{padding:"6px 14px",background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:100,fontFamily:"var(--mono)",fontSize:11,color:"var(--t2)",cursor:"pointer",letterSpacing:".04em",transition:"border-color .15s,color .15s"}}
+                    onMouseOver={e=>{e.currentTarget.style.borderColor="#bbf7d0";e.currentTarget.style.color="#16a34a";}}
+                    onMouseOut={e=>{e.currentTarget.style.borderColor="var(--border)";e.currentTarget.style.color="var(--t2)";}}>
+                    {OTTAWA_HOODS[slug].name} →
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="card" style={{padding:"28px 24px",display:"flex",flexDirection:"column",gap:20}}>

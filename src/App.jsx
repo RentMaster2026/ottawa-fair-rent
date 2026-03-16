@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import NeighbourhoodPage from "./NeighbourhoodPage";
+import { OTTAWA_HOODS, OTTAWA_CITY } from "./hoodData";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -469,6 +471,7 @@ export default function App() {
   const [rawCount,    setRawCount]    = useState(0);
   const [countLoaded, setCountLoaded] = useState(false);
   const displayCount = useCountUp(countLoaded ? rawCount : 0);
+  const [showHood, setShowHood] = useState(null);
 
   useEffect(()=>{
     supabase.from("rent_submissions").select("*",{count:"exact",head:true}).eq("city",CITY)
@@ -561,7 +564,13 @@ export default function App() {
   const benchLabel = communityN>=20 ? "Community data ("+communityN+" submissions)"
     : communityN>=5 ? "Blended — "+communityN+" submissions + CMHC"
     : "CMHC baseline";
-
+if (showHood) return (
+  <NeighbourhoodPage
+    hood={OTTAWA_HOODS[showHood]}
+    city={OTTAWA_CITY}
+    onBack={() => { setShowHood(null); window.scrollTo(0,0); }}
+  />
+);
   return (
     <><style>{CSS}</style>
     <div style={{minHeight:"100vh"}}>

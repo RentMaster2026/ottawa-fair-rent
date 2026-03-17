@@ -736,7 +736,7 @@ export default function App() {
               <span key={s} style={{padding:"3px 10px",background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:100,fontFamily:"var(--mono)",fontSize:9,color:"var(--t3)"}}>{s}</span>
             ))}
           </div>
-          <p style={{fontSize:11,color:"var(--t3)",lineHeight:1.7}}>Ontario guideline history used for rent-controlled calculations. Not legal or financial advice.</p>
+          <p style={{fontSize:11,color:"var(--t3)",lineHeight:1.7}}>Data last updated: CMHC October 2024 · Rentals.ca February 2025. Ontario guideline history used for rent-controlled calculations. Not legal or financial advice.</p>
         </div>
       </main>
     </div>

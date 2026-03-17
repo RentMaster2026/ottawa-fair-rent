@@ -20,6 +20,55 @@ export const OTTAWA_HOODS = {
     context: "Purpose-built rentals near the Westboro LRT station tend toward the higher end.",
     nearbyHoods: ["Hintonburg", "Carlington", "Bayshore"],
   },
+  hintonburg: {
+    slug: "hintonburg", name: "Hintonburg",
+    hoodMult: 1.10, vsAvgPct: 10,
+    description: "Hintonburg is a creative and increasingly popular neighbourhood just west of downtown Ottawa, known for its arts scene, cafes, and mix of heritage homes and newer builds.",
+    context: "Newer purpose-built buildings near the Tunneys Pasture LRT tend toward the higher end.",
+    nearbyHoods: ["Westboro", "Centretown", "Wellington Village"],
+  },
+  byward: {
+    slug: "byward", name: "Byward Market",
+    hoodMult: 1.18, vsAvgPct: 18,
+    description: "The Byward Market is Ottawa's historic entertainment and market district, offering some of the most central rental options in the city with strong walkability scores.",
+    context: "Units on quieter side streets away from the main market tend to offer better value.",
+    nearbyHoods: ["Lowertown", "Sandy Hill", "Downtown Core"],
+  },
+  kanata: {
+    slug: "kanata", name: "Kanata",
+    hoodMult: 0.97, vsAvgPct: -3,
+    description: "Kanata is Ottawa's largest suburban tech hub, home to many of the city's major employers. It offers more space for the price compared to central neighbourhoods.",
+    context: "Rents here are slightly below the city average, reflecting the suburban location and car dependency.",
+    nearbyHoods: ["Barrhaven", "Stittsville", "Nepean"],
+  },
+  barrhaven: {
+    slug: "barrhaven", name: "Barrhaven",
+    hoodMult: 0.92, vsAvgPct: -8,
+    description: "Barrhaven is a large suburban neighbourhood in Ottawa's south end, popular with families for its newer housing stock, schools, and amenities.",
+    context: "Rents are meaningfully below the city average, making this one of Ottawa's more affordable options.",
+    nearbyHoods: ["Kanata", "Nepean", "Riverside South"],
+  },
+  sandyhill: {
+    slug: "sandyhill", name: "Sandy Hill",
+    hoodMult: 1.04, vsAvgPct: 4,
+    description: "Sandy Hill is a dense, student-friendly neighbourhood adjacent to the University of Ottawa. It offers a mix of older walk-up apartments and some newer builds.",
+    context: "Proximity to uOttawa drives strong rental demand, particularly for 1-bedroom and bachelor units.",
+    nearbyHoods: ["Lowertown", "Byward Market", "Centretown"],
+  },
+  wellingtonvillage: {
+    slug: "wellingtonvillage", name: "Wellington Village",
+    hoodMult: 1.12, vsAvgPct: 12,
+    description: "Wellington Village is a quiet, upscale neighbourhood in Ottawa's west end, known for its heritage homes, local restaurants, and family-friendly streets.",
+    context: "The neighbourhood commands a premium over nearby Hintonburg, reflecting its quieter character and housing quality.",
+    nearbyHoods: ["Hintonburg", "Westboro", "Carlington"],
+  },
+  vanier: {
+    slug: "vanier", name: "Vanier",
+    hoodMult: 0.85, vsAvgPct: -15,
+    description: "Vanier is one of Ottawa's most affordable inner-city neighbourhoods, undergoing gradual revitalization. It offers some of the lowest rents within a short distance of downtown.",
+    context: "Rents are well below the city average, making Vanier one of the best value options close to the core.",
+    nearbyHoods: ["Rideau-Vanier", "Manor Park", "Overbrook"],
+  },
 };
 
 export const OTTAWA_CITY = {

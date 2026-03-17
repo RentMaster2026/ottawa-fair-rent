@@ -89,7 +89,7 @@ function getRange(bench, confLabel) {
 function getConf(n) {
   if(n>=20) return { label:"High",   dot:"#16a34a", textColor:"#166534", bg:"#f0fdf4", border:"#bbf7d0", desc:"Based on " + n + " local submissions blended with CMHC data." };
   if(n>=8)  return { label:"Medium", dot:"#d97706", textColor:"#92400e", bg:"#fffbeb", border:"#fde68a", desc:"Based on " + n + " local submissions blended with CMHC data." };
-  return           { label:"Low",    dot:"#dc2626", textColor:"#991b1b", bg:"#fef2f2", border:"#fecaca", desc:"Based primarily on CMHC data. Submit your rent to improve accuracy for this area." };
+  return           { label:"Limited local data", dot:"#dc2626", textColor:"#991b1b", bg:"#fef2f2", border:"#fecaca", desc:"Based on CMHC public data. Fewer than 8 renters have submitted for this area. Your submission improves accuracy here." };
 }
 
 function median(arr) {

@@ -477,8 +477,20 @@ export default function App() {
   const [showHood, setShowHood] = useState(null);
 
   useEffect(()=>{
+    const CACHE_KEY = CITY + "_count_cache";
+    const cached = localStorage.getItem(CACHE_KEY);
+    if(cached) {
+      const { count, ts } = JSON.parse(cached);
+      if(Date.now() - ts < 5 * 60 * 1000) {
+        setRawCount(count); setCountLoaded(true);
+      }
+    }
     supabase.from("rent_submissions").select("*",{count:"exact",head:true}).eq("city",CITY)
-      .then(({count})=>{ setRawCount(count??0); setCountLoaded(true); });
+      .then(({count})=>{
+        const n = count??0;
+        setRawCount(n); setCountLoaded(true);
+        localStorage.setItem(CACHE_KEY, JSON.stringify({count:n, ts:Date.now()}));
+      });
   },[]);
 
   useEffect(()=>{

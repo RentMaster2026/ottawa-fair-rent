@@ -613,11 +613,11 @@ export default function App() {
         {!result ? (
           <>
             <div style={{marginBottom:24}}>
-              <h1 style={{fontFamily:"var(--serif)",fontSize:"clamp(26px,4.5vw,40px)",fontWeight:400,lineHeight:1.15,letterSpacing:"-.02em",marginBottom:12,color:"var(--t1)"}}>
-                Is your Ottawa rent<br/><span style={{fontStyle:"italic",color:ACCENT}}>actually fair?</span>
+              <h1 style={{fontFamily:"var(--sans)",fontSize:"clamp(24px,4vw,36px)",fontWeight:700,lineHeight:1.15,letterSpacing:"-.02em",marginBottom:12,color:"var(--t1)"}}>
+                Ottawa Rent Calculator
               </h1>
               <p style={{fontSize:15,color:"var(--t2)",lineHeight:1.7,maxWidth:440}}>
-                Compare your rent to neighbourhood-level market data from CMHC and local renter data. Anonymous. Takes 30 seconds.
+                Check if your Ottawa rent is fair. Based on CMHC data and real renter submissions. Free. Anonymous. No account needed.
               </p>
             </div>
 

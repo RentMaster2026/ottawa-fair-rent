@@ -166,16 +166,23 @@ const CSS = `
   .d1{animation-delay:.04s}.d2{animation-delay:.09s}.d3{animation-delay:.14s}.d4{animation-delay:.19s}.d5{animation-delay:.24s}.d6{animation-delay:.29s}
   .hood-pill{padding:5px 13px;background:var(--bg-card);border:1px solid var(--border);border-radius:100px;font-family:var(--mono);font-size:11px;color:var(--t2);cursor:pointer;letter-spacing:.03em;transition:border-color .15s,color .15s;white-space:nowrap;}
   .hood-pill:hover{border-color:${ACCENT_BORDER};color:${ACCENT};}
-  /* Desktop two-column layout */
-  .page-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start;}
+  /* Layout */
+  .wrap{max-width:1200px;margin:0 auto;padding:0 20px;}
+  .wrap-lg{max-width:1200px;margin:0 auto;padding:40px 20px 80px;}
+  .page-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start;}
   .result-col{position:sticky;top:76px;}
+  @media(min-width:861px){
+    .wrap{padding:0 32px;}
+    .wrap-lg{padding:40px 32px 80px;}
+  }
   @media(max-width:860px){
-    .page-grid{grid-template-columns:1fr!important;}
-    .result-col{position:static!important;}
+    .page-grid{grid-template-columns:1fr;}
+    .result-col{position:static;}
   }
   @media(max-width:580px){
     .g2{grid-template-columns:1fr!important;}
     .gshare{grid-template-columns:1fr 1fr!important;}
+    .card{border-radius:var(--r-md)!important;}
   }
   @media(prefers-reduced-motion:reduce){.fade-up{animation:none!important;opacity:1!important;transform:none!important;}*{transition-duration:.01ms!important;}}
 `;
@@ -470,7 +477,7 @@ export default function App() {
 
       {/* NAV */}
       <header style={{ background:"var(--nav)", borderBottom:"1px solid rgba(255,255,255,.06)", position:"sticky", top:0, zIndex:100 }}>
-        <div style={{ maxWidth:1200, margin:"0 auto", padding:"0 32px", display:"flex", alignItems:"center", justifyContent:"space-between", height:56 }}>
+        <div className="wrap" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", height:56 }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <a href="https://fairrent.ca" style={{ width:28, height:28, background:ACCENT, borderRadius:7, display:"flex", alignItems:"center", justifyContent:"center", textDecoration:"none", flexShrink:0 }}>
               <span style={{ fontFamily:"var(--mono)", fontSize:11, fontWeight:500, color:"#fff" }}>FR</span>
@@ -490,7 +497,7 @@ export default function App() {
       </header>
 
       {/* MAIN */}
-      <div style={{ maxWidth:1200, margin:"0 auto", padding:"40px 32px 80px" }}>
+      <div className="wrap-lg">
 
         {/* Page heading + hood pills */}
         <div style={{ marginBottom:32 }}>

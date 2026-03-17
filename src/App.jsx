@@ -78,8 +78,10 @@ function buildBreakdown(hood, unit, parking, utilities, smartBench, communityN) 
   return { base, hoodMult, hoodAdj, afterHood, parkingAdj, utilitiesAdj, afterAmenity, communityAdj, communityN, w, finalBench };
 }
 
-function getRange(bench, confLabel) {
-  const spread = confLabel==="High" ? 0.08 : confLabel==="Medium" ? 0.13 : 0.19;
+function getRange(bench, confLabel, unit="1br") {
+  const unitSpreads = { bachelor:0.09, "1br":0.10, "2br":0.11, "3br":0.13, "3plus":0.15 };
+  const baseSpread = unitSpreads[unit] ?? 0.11;
+  const spread = confLabel==="High" ? 0.07 : confLabel==="Medium" ? 0.10 : baseSpread;
   return {
     low:  Math.round(bench*(1-spread)/50)*50,
     high: Math.round(bench*(1+spread)/50)*50,
@@ -520,7 +522,7 @@ export default function App() {
     const bd    = buildBreakdown(hood, unitType, parking, utilities, smartBench, communityN);
     const bench = bd.finalBench;
     const conf  = getConf(communityN);
-    const range = getRange(bench, conf.label);
+    const range = getRange(bench, conf.label, unitType);
 
     // Position
     const pos = rentNum < range.low ? "below" : rentNum > range.high ? "above" : "within";

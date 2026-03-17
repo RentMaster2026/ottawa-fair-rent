@@ -10,16 +10,15 @@ const supabase = createClient(
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const CITY         = "ottawa";
-const CITY_NAME    = "Ottawa";
-const COOLDOWN_KEY = "ottawa_fair_rent_last_submit";
-const COOLDOWN_MS  = 60_000;
-const ACCENT       = "#16a34a";
-const ACCENT_LIGHT = "#f0fdf4";
-const ACCENT_BORDER= "#bbf7d0";
-const INFLATION    = 0.038;
-const SHARE_URL    = "https://ottawafairrent.ca";
-const PROVINCE     = "Ontario";
+const CITY          = "ottawa";
+const CITY_NAME     = "Ottawa";
+const COOLDOWN_KEY  = "ottawa_fair_rent_last_submit";
+const COOLDOWN_MS   = 60_000;
+const ACCENT        = "#16a34a";
+const ACCENT_LIGHT  = "#f0fdf4";
+const ACCENT_BORDER = "#bbf7d0";
+const INFLATION     = 0.038;
+const SHARE_URL     = "https://ottawafairrent.ca";
 const RENT_CONTROLLED = true;
 
 const BASES = { bachelor:1550, "1br":2026, "2br":2530, "3br":3100, "3plus":3600 };
@@ -51,299 +50,289 @@ const UNITS = [
   { key:"3br",      label:"3 Bedroom"         },
   { key:"3plus",    label:"3+ Bedroom"        },
 ];
-const NEIGHBORHOODS = Object.keys(HOODS).sort((a,b)=>a.localeCompare(b));
+const NEIGHBORHOODS = Object.keys(HOODS).sort((a,b) => a.localeCompare(b));
 
 const MARKET_SNAPSHOT = [
-  {label:"1-bedroom average",  val:"$1,945/mo"},
-  {label:"2-bedroom average",  val:"$2,490/mo"},
-  {label:"Vacancy rate (2025)", val:"3.1%"},
-  {label:"Highest neighbourhood", val:"Rockcliffe Park (+28%)"},
-  {label:"Most affordable",    val:"Vanier (-15%)"},
-  {label:"2026 guideline increase", val:"2.1% max"},
+  { label:"1-bedroom average",       val:"$1,945/mo" },
+  { label:"2-bedroom average",       val:"$2,490/mo" },
+  { label:"Vacancy rate (2025)",     val:"3.1%"      },
+  { label:"Highest neighbourhood",   val:"Rockcliffe Park (+28%)" },
+  { label:"Most affordable",         val:"Vanier (-15%)" },
+  { label:"2026 guideline increase", val:"2.1% max"  },
 ];
 
-// ─── Pure functions ───────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const fmt = v => Number(v).toLocaleString("en-CA",{style:"currency",currency:"CAD",maximumFractionDigits:0});
+const fmt = v => Number(v).toLocaleString("en-CA", { style:"currency", currency:"CAD", maximumFractionDigits:0 });
 
 function calcGuidelineCap(moveInRent, moveInYear) {
   const cur = new Date().getFullYear(); let r = moveInRent;
-  for(let yr=moveInYear+1; yr<=cur; yr++) r *= 1+(GUIDELINES[yr]??0.025);
+  for (let yr = moveInYear + 1; yr <= cur; yr++) r *= 1 + (GUIDELINES[yr] ?? 0.025);
   return Math.round(r);
 }
 
 function buildBreakdown(hood, unit, parking, utilities, smartBench, communityN) {
-  const base      = BASES[unit] ?? BASES["1br"];
-  const hoodMult  = HOODS[hood] ?? 1;
-  const hoodAdj   = Math.round(base * hoodMult) - base;
-  const afterHood = Math.round(base * hoodMult);
+  const base       = BASES[unit] ?? BASES["1br"];
+  const hoodMult   = HOODS[hood] ?? 1;
+  const hoodAdj    = Math.round(base * hoodMult) - base;
+  const afterHood  = Math.round(base * hoodMult);
   const parkingAdj   = parking   ? ADDONS.parking   : 0;
   const utilitiesAdj = utilities ? ADDONS.utilities : 0;
   const afterAmenity = afterHood + parkingAdj + utilitiesAdj;
-  const w = communityN<5?0:communityN<10?0.2:communityN<20?0.4:communityN<50?0.6:0.8;
-  const communityAdj = (smartBench!=null && w>0) ? Math.round((smartBench-afterHood)*w) : 0;
+  const w = communityN < 5 ? 0 : communityN < 10 ? 0.2 : communityN < 20 ? 0.4 : communityN < 50 ? 0.6 : 0.8;
+  const communityAdj = (smartBench != null && w > 0) ? Math.round((smartBench - afterHood) * w) : 0;
   const finalBench   = afterAmenity + communityAdj;
   return { base, hoodMult, hoodAdj, afterHood, parkingAdj, utilitiesAdj, afterAmenity, communityAdj, communityN, w, finalBench };
 }
 
-function getRange(bench, confLabel, unit="1br") {
-  const unitSpreads = { bachelor:0.09,"1br":0.10,"2br":0.11,"3br":0.13,"3plus":0.15 };
-  const baseSpread  = unitSpreads[unit] ?? 0.11;
-  const spread      = confLabel==="High"?0.07:confLabel==="Medium"?0.10:baseSpread;
-  return { low:Math.round(bench*(1-spread)/50)*50, high:Math.round(bench*(1+spread)/50)*50 };
+function getRange(bench, confLabel, unit = "1br") {
+  const spreads = { bachelor:0.09, "1br":0.10, "2br":0.11, "3br":0.13, "3plus":0.15 };
+  const base    = spreads[unit] ?? 0.11;
+  const spread  = confLabel === "High" ? 0.07 : confLabel === "Medium" ? 0.10 : base;
+  return { low: Math.round(bench*(1-spread)/50)*50, high: Math.round(bench*(1+spread)/50)*50 };
 }
 
 function getConf(n) {
-  if(n>=20) return{label:"High",   dot:"#16a34a",textColor:"#166534",bg:"#f0fdf4",border:"#bbf7d0",desc:"Based on "+n+" local submissions blended with CMHC data."};
-  if(n>=8)  return{label:"Medium", dot:"#d97706",textColor:"#92400e",bg:"#fffbeb",border:"#fde68a",desc:"Based on "+n+" local submissions blended with CMHC data."};
-  return         {label:"Limited local data",dot:"#dc2626",textColor:"#991b1b",bg:"#fef2f2",border:"#fecaca",desc:"Based on CMHC public data. Your submission improves accuracy here."};
+  if (n >= 20) return { label:"High",              dot:"#16a34a", textColor:"#166534", bg:"#f0fdf4", border:"#bbf7d0", desc:`Based on ${n} local submissions blended with CMHC data.` };
+  if (n >= 8)  return { label:"Medium",            dot:"#d97706", textColor:"#92400e", bg:"#fffbeb", border:"#fde68a", desc:`Based on ${n} local submissions blended with CMHC data.` };
+  return             { label:"Limited local data", dot:"#dc2626", textColor:"#991b1b", bg:"#fef2f2", border:"#fecaca", desc:"Based on CMHC public data. Your submission improves accuracy here." };
 }
 
 function median(arr) {
-  if(!arr.length) return null;
-  const s=[...arr].sort((a,b)=>a-b), m=Math.floor(s.length/2);
-  return s.length%2?s[m]:(s[m-1]+s[m])/2;
+  if (!arr.length) return null;
+  const s = [...arr].sort((a,b) => a-b), m = Math.floor(s.length/2);
+  return s.length % 2 ? s[m] : (s[m-1]+s[m])/2;
 }
 
-function communityWeight(n){if(n<5)return 0;if(n<10)return 0.2;if(n<20)return 0.4;if(n<50)return 0.6;return 0.8;}
+function communityWeight(n) { return n<5?0:n<10?0.2:n<20?0.4:n<50?0.6:0.8; }
 
-function useCountUp(target, dur=1000){
-  const[val,set]=useState(0),raf=useRef(null),prev=useRef(0);
-  useEffect(()=>{
-    if(!target)return;const from=prev.current;prev.current=target;let t0=null;
-    const tick=ts=>{if(!t0)t0=ts;const p=Math.min((ts-t0)/dur,1);set(Math.round(from+(target-from)*(1-Math.pow(1-p,3))));if(p<1)raf.current=requestAnimationFrame(tick);};
-    raf.current=requestAnimationFrame(tick);return()=>cancelAnimationFrame(raf.current);
-  },[target]);return val;
+function useCountUp(target, dur=1000) {
+  const [val,set] = useState(0), raf = useRef(null), prev = useRef(0);
+  useEffect(() => {
+    if (!target) return;
+    const from = prev.current; prev.current = target; let t0 = null;
+    const tick = ts => { if(!t0)t0=ts; const p=Math.min((ts-t0)/dur,1); set(Math.round(from+(target-from)*(1-Math.pow(1-p,3)))); if(p<1)raf.current=requestAnimationFrame(tick); };
+    raf.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf.current);
+  }, [target]);
+  return val;
 }
 
-// ─── CSS ──────────────────────────────────────────────────────────────────────
+// ─── CSS ─────────────────────────────────────────────────────────────────────
 
-const CSS = [
-  "@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');",
-  ":root{--serif:'Instrument Serif',Georgia,serif;--sans:'Geist',-apple-system,BlinkMacSystemFont,sans-serif;--mono:'Geist Mono','Courier New',monospace;--bg:#f9fafb;--bg-card:#ffffff;--border:#e2e8f0;--border-mid:#cbd5e1;--t1:#0f172a;--t2:#475569;--t3:#94a3b8;--green:#16a34a;--green-lt:#f0fdf4;--green-bd:#bbf7d0;--nav:#0f172a;--r-sm:6px;--r-md:10px;--r-lg:14px;--sh:0 1px 4px rgba(0,0,0,.06);--max:700px;}",
-  "html,body,#root{margin:0;padding:0;width:100%;background:var(--bg);}",
-  "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}",
-  "body{font-family:var(--sans);color:var(--t1);-webkit-font-smoothing:antialiased;}",
-  "input,select,button{font-family:var(--sans);}",
-  "input:focus,select:focus{outline:none;border-color:"+ACCENT+"!important;box-shadow:0 0 0 3px rgba(22,163,74,.15)!important;}",
-  "input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}",
-  ".card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--sh);}",
-  ".slabel{font-family:var(--mono);font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px;}",
-  ".inp{width:100%;padding:11px 14px;background:var(--bg-card);border:1.5px solid var(--border);border-radius:var(--r-md);color:var(--t1);font-size:15px;transition:border-color .15s,box-shadow .15s;appearance:none;}",
-  ".inp::placeholder{color:var(--t3);}",
-  ".sel{background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 13px center;padding-right:36px;cursor:pointer;}",
-  ".toggle-btn{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-card);border:1.5px solid var(--border);border-radius:var(--r-md);cursor:pointer;text-align:left;transition:border-color .15s,background .15s;}",
-  ".toggle-btn.on{border-color:"+ACCENT_BORDER+";background:"+ACCENT_LIGHT+";}",
-  ".opt-btn{flex:1;padding:10px 14px;background:var(--bg-card);border:1.5px solid var(--border);border-radius:var(--r-md);color:var(--t2);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;}",
-  ".opt-btn.on{border-color:"+ACCENT_BORDER+";background:"+ACCENT_LIGHT+";color:"+ACCENT+";font-weight:600;}",
-  ".btn-primary{width:100%;padding:13px;background:var(--t1);color:#fff;border:none;border-radius:var(--r-md);font-size:14px;font-weight:600;cursor:pointer;transition:background .15s;letter-spacing:.01em;}",
-  ".btn-primary:hover:not(:disabled){background:#1e293b;}",
-  ".btn-primary:disabled{opacity:.4;cursor:not-allowed;}",
-  ".btn-primary:focus-visible,.btn-ghost:focus-visible,.opt-btn:focus-visible,.toggle-btn:focus-visible{outline:2px solid "+ACCENT+";outline-offset:2px;}",
-  ".btn-ghost{padding:11px 20px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r-md);color:var(--t2);font-size:13px;font-weight:600;cursor:pointer;transition:border-color .15s,color .15s;}",
-  ".btn-ghost:hover{border-color:var(--border-mid);color:var(--t1);}",
-  ".share-btn{display:flex;align-items:center;justify-content:center;padding:9px 12px;border-radius:var(--r-sm);font-family:var(--mono);font-size:11px;font-weight:500;text-decoration:none;cursor:pointer;border:none;letter-spacing:.03em;transition:opacity .15s;}",
-  ".share-btn:hover{opacity:.8;}",
-  ".breakdown-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--border);}",
-  ".breakdown-row:last-child{border-bottom:none;}",
-  ".range-bar-track{height:6px;border-radius:6px;background:var(--border);position:relative;margin:10px 0 6px;}",
-  ".live-dot{width:6px;height:6px;border-radius:50%;background:"+ACCENT+";flex-shrink:0;animation:blink 2.4s ease-in-out infinite;}",
-  "@keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.5)}}",
-  ".err-msg{font-size:11px;color:#dc2626;margin-top:4px;}",
-  ".fade-up{opacity:0;transform:translateY(10px);animation:fu .4s ease forwards;}",
-  "@keyframes fu{to{opacity:1;transform:none;}}",
-  ".d1{animation-delay:.04s}.d2{animation-delay:.09s}.d3{animation-delay:.14s}.d4{animation-delay:.19s}.d5{animation-delay:.24s}.d6{animation-delay:.29s}.d7{animation-delay:.34s}",
-  "@media(max-width:580px){.g2{grid-template-columns:1fr!important}.g3{grid-template-columns:1fr 1fr!important}.gcta{grid-template-columns:1fr!important}.gshare{grid-template-columns:1fr 1fr!important}}",
-  "@media(prefers-reduced-motion:reduce){.fade-up{animation:none!important;opacity:1!important;transform:none!important;}*{transition-duration:.01ms!important;}}",
-].join("\n");
+const CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+  :root {
+    --serif:'Instrument Serif',Georgia,serif;
+    --sans:'Geist',-apple-system,BlinkMacSystemFont,sans-serif;
+    --mono:'Geist Mono','Courier New',monospace;
+    --bg:#f9fafb; --bg-card:#fff;
+    --border:#e2e8f0; --border-mid:#cbd5e1;
+    --t1:#0f172a; --t2:#475569; --t3:#94a3b8;
+    --nav:#0f172a;
+    --r-sm:6px; --r-md:10px; --r-lg:14px;
+    --sh:0 1px 4px rgba(0,0,0,.06);
+    --accent:${ACCENT}; --accent-light:${ACCENT_LIGHT}; --accent-border:${ACCENT_BORDER};
+  }
+  html,body,#root{margin:0;padding:0;width:100%;background:var(--bg);}
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:var(--sans);color:var(--t1);-webkit-font-smoothing:antialiased;}
+  input,select,button{font-family:var(--sans);}
+  input:focus,select:focus{outline:none;border-color:${ACCENT}!important;box-shadow:0 0 0 3px rgba(22,163,74,.15)!important;}
+  input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
+  .card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--sh);}
+  .slabel{font-family:var(--mono);font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;}
+  .inp{width:100%;padding:10px 13px;background:var(--bg-card);border:1.5px solid var(--border);border-radius:var(--r-md);color:var(--t1);font-size:14px;transition:border-color .15s;appearance:none;}
+  .sel{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px;cursor:pointer;}
+  .toggle-btn{display:flex;align-items:center;gap:10px;padding:10px 13px;background:var(--bg-card);border:1.5px solid var(--border);border-radius:var(--r-md);cursor:pointer;text-align:left;transition:border-color .15s,background .15s;width:100%;}
+  .toggle-btn.on{border-color:${ACCENT_BORDER};background:${ACCENT_LIGHT};}
+  .opt-btn{flex:1;padding:9px 12px;background:var(--bg-card);border:1.5px solid var(--border);border-radius:var(--r-md);color:var(--t2);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;}
+  .opt-btn.on{border-color:${ACCENT_BORDER};background:${ACCENT_LIGHT};color:${ACCENT};font-weight:600;}
+  .btn-primary{width:100%;padding:12px;background:var(--t1);color:#fff;border:none;border-radius:var(--r-md);font-size:14px;font-weight:600;cursor:pointer;transition:background .15s;letter-spacing:.01em;}
+  .btn-primary:hover:not(:disabled){background:#1e293b;}
+  .btn-primary:disabled{opacity:.4;cursor:not-allowed;}
+  .btn-ghost{padding:10px 18px;background:transparent;border:1.5px solid var(--border);border-radius:var(--r-md);color:var(--t2);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;}
+  .btn-ghost:hover{border-color:var(--border-mid);color:var(--t1);}
+  .share-btn{display:flex;align-items:center;justify-content:center;padding:9px 10px;border-radius:var(--r-sm);font-family:var(--mono);font-size:11px;font-weight:500;text-decoration:none;cursor:pointer;border:none;letter-spacing:.03em;transition:opacity .15s;}
+  .share-btn:hover{opacity:.8;}
+  .breakdown-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);}
+  .breakdown-row:last-child{border-bottom:none;}
+  .range-bar-track{height:6px;border-radius:6px;background:var(--border);position:relative;margin:10px 0 6px;}
+  .live-dot{width:6px;height:6px;border-radius:50%;background:${ACCENT};flex-shrink:0;animation:blink 2.4s ease-in-out infinite;}
+  .err-msg{font-size:11px;color:#dc2626;margin-top:4px;}
+  .fade-up{opacity:0;transform:translateY(10px);animation:fu .4s ease forwards;}
+  @keyframes fu{to{opacity:1;transform:none;}}
+  @keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.5)}}
+  .d1{animation-delay:.04s}.d2{animation-delay:.09s}.d3{animation-delay:.14s}.d4{animation-delay:.19s}.d5{animation-delay:.24s}.d6{animation-delay:.29s}
+  .hood-pill{padding:5px 13px;background:var(--bg-card);border:1px solid var(--border);border-radius:100px;font-family:var(--mono);font-size:11px;color:var(--t2);cursor:pointer;letter-spacing:.03em;transition:border-color .15s,color .15s;white-space:nowrap;}
+  .hood-pill:hover{border-color:${ACCENT_BORDER};color:${ACCENT};}
+  /* Desktop two-column layout */
+  .page-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start;}
+  .result-col{position:sticky;top:76px;}
+  @media(max-width:860px){
+    .page-grid{grid-template-columns:1fr!important;}
+    .result-col{position:static!important;}
+  }
+  @media(max-width:580px){
+    .g2{grid-template-columns:1fr!important;}
+    .gshare{grid-template-columns:1fr 1fr!important;}
+  }
+  @media(prefers-reduced-motion:reduce){.fade-up{animation:none!important;opacity:1!important;transform:none!important;}*{transition-duration:.01ms!important;}}
+`;
 
-// ─── Result ───────────────────────────────────────────────────────────────────
+// ─── Result panel ─────────────────────────────────────────────────────────────
 
-function ResultPage({ result, hood, unitType, onReset }) {
+function ResultPanel({ result, hood, unitType, onReset }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [copied,    setCopied]    = useState(false);
-  const [showCard,  setShowCard]  = useState(false);
   const copyRef = useRef(null);
-  const unitLabel = UNITS.find(u=>u.key===unitType)?.label ?? unitType;
-  const bd = result.breakdown, conf = result.conf, posCopy = result.posCopy, pos = result.pos;
+  const unitLabel = UNITS.find(u => u.key === unitType)?.label ?? unitType;
+  const { breakdown:bd, conf, posCopy, pos, range, rent, communityN } = result;
 
-  function copyLink(){
+  const barMin  = Math.round(range.low  * 0.85 / 50) * 50;
+  const barMax  = Math.round(range.high * 1.15 / 50) * 50;
+  const barSpan = barMax - barMin;
+  const lowPct  = ((range.low  - barMin) / barSpan) * 100;
+  const highPct = ((range.high - barMin) / barSpan) * 100;
+  const rentPct = Math.max(2, Math.min(98, ((rent - barMin) / barSpan) * 100));
+
+  function copyLink() {
     navigator.clipboard?.writeText(SHARE_URL);
-    setCopied(true);clearTimeout(copyRef.current);
-    copyRef.current=setTimeout(()=>setCopied(false),2000);
+    setCopied(true); clearTimeout(copyRef.current);
+    copyRef.current = setTimeout(() => setCopied(false), 2000);
   }
 
-  function shareText(){
-    const posLabel=pos==="below"?"below":pos==="above"?"above":"within";
-    return "My "+unitLabel.toLowerCase()+" in "+hood+" is "+posLabel+" the estimated fair rent range. Range: "+fmt(result.range.low)+"-"+fmt(result.range.high)+"/mo. Check yours at "+SHARE_URL;
-  }
+  const shareText = () => {
+    const lbl = pos === "below" ? "below" : pos === "above" ? "above" : "within";
+    return `My ${unitLabel.toLowerCase()} in ${hood} is ${lbl} the estimated fair rent range. Range: ${fmt(range.low)}-${fmt(range.high)}/mo. Check yours at ${SHARE_URL}`;
+  };
 
-  const barMin=Math.round(result.range.low*0.85/50)*50;
-  const barMax=Math.round(result.range.high*1.15/50)*50;
-  const barSpan=barMax-barMin;
-  const lowPct=((result.range.low-barMin)/barSpan)*100;
-  const highPct=((result.range.high-barMin)/barSpan)*100;
-  const rentPct=Math.max(2,Math.min(98,((result.rent-barMin)/barSpan)*100));
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
 
-  return(
-    <div style={{display:"flex",flexDirection:"column",gap:14}}>
-
-      <div className="card fade-up d1" style={{padding:"28px 24px",background:posCopy.bg,borderColor:posCopy.border}}>
-        <div style={{fontFamily:"var(--mono)",fontSize:10,color:posCopy.color,letterSpacing:".1em",textTransform:"uppercase",marginBottom:12,opacity:.8}}>
+      {/* Verdict */}
+      <div className="card fade-up d1" style={{ padding:"24px 22px", background:posCopy.bg, borderColor:posCopy.border }}>
+        <div style={{ fontFamily:"var(--mono)", fontSize:10, color:posCopy.color, letterSpacing:".1em", textTransform:"uppercase", marginBottom:10, opacity:.8 }}>
           {CITY_NAME} &middot; {hood} &middot; {unitLabel}
         </div>
-        <h2 style={{fontFamily:"var(--serif)",fontSize:"clamp(20px,3.5vw,28px)",fontWeight:400,color:"var(--t1)",lineHeight:1.2,marginBottom:8}}>{posCopy.headline}</h2>
-        <p style={{fontSize:14,color:"var(--t2)",lineHeight:1.7,marginBottom:24}}>{posCopy.sub}</p>
-        <div style={{marginBottom:20}}>
-          <div style={{display:"flex",justifyContent:"space-between",fontFamily:"var(--mono)",fontSize:11,color:"var(--t3)",marginBottom:6}}>
+        <h2 style={{ fontFamily:"var(--serif)", fontSize:"clamp(18px,2vw,24px)", fontWeight:400, color:"var(--t1)", lineHeight:1.2, marginBottom:8 }}>{posCopy.headline}</h2>
+        <p style={{ fontSize:13, color:"var(--t2)", lineHeight:1.7, marginBottom:20 }}>{posCopy.sub}</p>
+
+        {/* Range bar */}
+        <div style={{ marginBottom:16 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", fontFamily:"var(--mono)", fontSize:10, color:"var(--t3)", marginBottom:5 }}>
             <span>Estimated fair range</span>
-            <span style={{color:"var(--t2)",fontWeight:500}}>{fmt(result.range.low)} to {fmt(result.range.high)}/mo</span>
+            <span style={{ color:"var(--t2)", fontWeight:500 }}>{fmt(range.low)} to {fmt(range.high)}/mo</span>
           </div>
           <div className="range-bar-track">
-            <div style={{position:"absolute",top:0,height:6,borderRadius:6,left:lowPct+"%",width:(highPct-lowPct)+"%",background:posCopy.color,opacity:.22}}/>
-            <div style={{position:"absolute",top:"50%",left:lowPct+"%",transform:"translate(-50%,-50%)",width:2,height:10,background:posCopy.color,borderRadius:1,opacity:.5}}/>
-            <div style={{position:"absolute",top:"50%",left:highPct+"%",transform:"translate(-50%,-50%)",width:2,height:10,background:posCopy.color,borderRadius:1,opacity:.5}}/>
-            <div style={{position:"absolute",top:"50%",left:rentPct+"%",transform:"translate(-50%,-50%)",width:12,height:12,borderRadius:"50%",background:pos==="within"?posCopy.color:"var(--bg-card)",border:"2px solid "+posCopy.color,boxShadow:"0 0 0 2px "+posCopy.color+"30"}}/>
+            <div style={{ position:"absolute", top:0, height:6, borderRadius:6, left:lowPct+"%", width:(highPct-lowPct)+"%", background:posCopy.color, opacity:.22 }}/>
+            <div style={{ position:"absolute", top:"50%", left:lowPct+"%", transform:"translate(-50%,-50%)", width:2, height:10, background:posCopy.color, borderRadius:1, opacity:.5 }}/>
+            <div style={{ position:"absolute", top:"50%", left:highPct+"%", transform:"translate(-50%,-50%)", width:2, height:10, background:posCopy.color, borderRadius:1, opacity:.5 }}/>
+            <div style={{ position:"absolute", top:"50%", left:rentPct+"%", transform:"translate(-50%,-50%)", width:12, height:12, borderRadius:"50%", background:pos==="within"?posCopy.color:"var(--bg-card)", border:"2px solid "+posCopy.color }}/>
           </div>
-          <div style={{display:"flex",justifyContent:"space-between",fontFamily:"var(--mono)",fontSize:10,color:"var(--t3)"}}>
+          <div style={{ display:"flex", justifyContent:"space-between", fontFamily:"var(--mono)", fontSize:10, color:"var(--t3)" }}>
             <span>{fmt(barMin)}</span>
-            <span style={{color:posCopy.color,fontWeight:500}}>Your rent: {fmt(result.rent)}</span>
+            <span style={{ color:posCopy.color, fontWeight:500 }}>Your rent: {fmt(rent)}</span>
             <span>{fmt(barMax)}</span>
           </div>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-          <span style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--t3)",letterSpacing:".08em",textTransform:"uppercase"}}>Confidence</span>
-          <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",background:conf.bg,border:"1px solid "+conf.border,borderRadius:100,fontFamily:"var(--mono)",fontSize:10,letterSpacing:".06em"}}>
-            <span style={{width:5,height:5,borderRadius:"50%",background:conf.dot}}/>
-            <span style={{color:conf.textColor}}>{conf.label}</span>
+
+        {/* Confidence */}
+        <div style={{ display:"flex", alignItems:"center", gap:7, flexWrap:"wrap" }}>
+          <span style={{ fontFamily:"var(--mono)", fontSize:9, color:"var(--t3)", letterSpacing:".08em", textTransform:"uppercase" }}>Confidence</span>
+          <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"2px 9px", background:conf.bg, border:"1px solid "+conf.border, borderRadius:100, fontFamily:"var(--mono)", fontSize:10 }}>
+            <span style={{ width:5, height:5, borderRadius:"50%", background:conf.dot }}/>
+            <span style={{ color:conf.textColor }}>{conf.label}</span>
           </span>
-          <span style={{fontSize:11,color:"var(--t3)"}}>{conf.desc}</span>
+          <span style={{ fontSize:11, color:"var(--t3)" }}>{conf.desc}</span>
         </div>
       </div>
 
-      <div className="card fade-up d2" style={{padding:"24px"}}>
+      {/* Breakdown */}
+      <div className="card fade-up d2" style={{ padding:"20px 22px" }}>
         <div className="slabel">How this estimate was built</div>
-        <p style={{fontSize:13,color:"var(--t2)",lineHeight:1.7,marginBottom:20}}>We start with a city-wide average, then adjust for neighbourhood, amenities, and local renter data.</p>
-        <div>
-          <div className="breakdown-row">
-            <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:"var(--t1)"}}>City baseline</div><div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>{CITY_NAME} average for a {unitLabel.toLowerCase()} - CMHC + Rentals.ca</div></div>
-            <div style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:500,color:"var(--t1)",flexShrink:0}}>{fmt(bd.base)}</div>
-          </div>
-          <div className="breakdown-row">
-            <div style={{flex:1}}>
-              <div style={{fontSize:13,fontWeight:600,color:"var(--t1)"}}>Neighbourhood: {hood}</div>
-              <div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>{bd.hoodMult>1?"Rents in this area run higher than the city average":bd.hoodMult<1?"Rents in this area run lower than the city average":"Rents in this area match the city average"} ({((bd.hoodMult-1)*100).toFixed(0)}% {bd.hoodMult>=1?"premium":"discount"})</div>
+        {[
+          { label:"City baseline", sub:`${CITY_NAME} average for a ${unitLabel.toLowerCase()} — CMHC + Rentals.ca`, val:bd.base, sign:false },
+          { label:`Neighbourhood: ${hood}`, sub:`${bd.hoodMult >= 1 ? "Premium" : "Discount"} area (${((bd.hoodMult-1)*100).toFixed(0)}% vs city avg)`, val:bd.hoodAdj, sign:true },
+          ...(bd.parkingAdj > 0 || bd.utilitiesAdj > 0 ? [{ label:"Included amenities", sub:[bd.parkingAdj>0&&"Parking (+$250)", bd.utilitiesAdj>0&&"Utilities (+$120)"].filter(Boolean).join(" and "), val:bd.parkingAdj+bd.utilitiesAdj, sign:true }] : []),
+          { label:"Local renter data", sub:bd.communityN < 5 ? "Not enough local submissions — CMHC baseline only" : `${bd.communityN} anonymous submissions (${Math.round(bd.w*100)}% weight)`, val:bd.communityAdj, sign:true },
+        ].map(({ label, sub, val, sign }) => (
+          <div key={label} className="breakdown-row">
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:"var(--t1)" }}>{label}</div>
+              <div style={{ fontSize:11, color:"var(--t3)", marginTop:2 }}>{sub}</div>
             </div>
-            <div style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:500,color:bd.hoodAdj>=0?"var(--t1)":ACCENT,flexShrink:0}}>{bd.hoodAdj>=0?"+":""}{fmt(bd.hoodAdj)}</div>
-          </div>
-          {(bd.parkingAdj>0||bd.utilitiesAdj>0) ? (
-            <div className="breakdown-row">
-              <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:"var(--t1)"}}>Included amenities</div><div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>{[bd.parkingAdj>0&&"Parking (+$250)",bd.utilitiesAdj>0&&"Utilities (+$120)"].filter(Boolean).join(" and ")}</div></div>
-              <div style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:500,color:"var(--t1)",flexShrink:0}}>+{fmt(bd.parkingAdj+bd.utilitiesAdj)}</div>
-            </div>
-          ) : (
-            <div className="breakdown-row">
-              <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:"var(--t1)"}}>Amenities</div><div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>No parking or utilities included in this rent</div></div>
-              <div style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:500,color:"var(--t3)",flexShrink:0}}>-</div>
-            </div>
-          )}
-          <div className="breakdown-row">
-            <div style={{flex:1}}>
-              <div style={{fontSize:13,fontWeight:600,color:"var(--t1)"}}>Local renter data</div>
-              <div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>{bd.communityN<5?"Not enough local submissions yet. Using public data only.":bd.communityN+" anonymous submissions from this neighbourhood ("+Math.round(bd.w*100)+"% weight applied)"}</div>
-            </div>
-            <div style={{fontFamily:"var(--mono)",fontSize:14,fontWeight:500,color:bd.communityAdj===0?"var(--t3)":bd.communityAdj>0?"var(--t1)":ACCENT,flexShrink:0}}>{bd.communityAdj===0?"-":(bd.communityAdj>0?"+":"")+fmt(bd.communityAdj)}</div>
-          </div>
-          <div className="breakdown-row" style={{borderTop:"2px solid var(--border)",paddingTop:14,marginTop:2,borderBottom:"none"}}>
-            <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700,color:"var(--t1)"}}>Benchmark</div><div style={{fontSize:12,color:"var(--t3)",marginTop:2}}>Mid-point of the estimated fair range</div></div>
-            <div style={{fontFamily:"var(--mono)",fontSize:17,fontWeight:700,color:"var(--t1)",flexShrink:0}}>{fmt(bd.finalBench)}/mo</div>
-          </div>
-        </div>
-        <div style={{marginTop:16,padding:"12px 16px",background:"var(--bg)",border:"1px solid var(--border)",borderRadius:"var(--r-md)",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
-          <div>
-            <div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--t3)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:3}}>Estimated fair range</div>
-            <div style={{fontFamily:"var(--mono)",fontSize:16,fontWeight:500,color:"var(--t1)"}}>{fmt(result.range.low)} to {fmt(result.range.high)}/mo</div>
-          </div>
-          <div style={{textAlign:"right"}}>
-            <div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--t3)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:3}}>Confidence</div>
-            <div style={{display:"inline-flex",alignItems:"center",gap:5}}>
-              <span style={{width:6,height:6,borderRadius:"50%",background:conf.dot}}/>
-              <span style={{fontFamily:"var(--mono)",fontSize:12,color:conf.textColor,fontWeight:500}}>{conf.label}</span>
+            <div style={{ fontFamily:"var(--mono)", fontSize:13, fontWeight:500, color:"var(--t1)", flexShrink:0 }}>
+              {sign && val !== 0 ? (val > 0 ? "+" : "") + fmt(val) : sign && val === 0 ? "-" : fmt(val)}
             </div>
           </div>
+        ))}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:12, marginTop:4, borderTop:"2px solid var(--border)" }}>
+          <div style={{ fontSize:13, fontWeight:700, color:"var(--t1)" }}>Benchmark</div>
+          <div style={{ fontFamily:"var(--mono)", fontSize:16, fontWeight:700, color:"var(--t1)" }}>{fmt(bd.finalBench)}/mo</div>
         </div>
       </div>
 
-      {!result.sameYear && RENT_CONTROLLED && (
-        <div className="card fade-up d3" style={{padding:"22px 24px",background:result.isRentControlled?"#f0fdf4":"#fffbeb",borderColor:result.isRentControlled?"#bbf7d0":"#fde68a"}}>
-          <div className="slabel" style={{color:result.isRentControlled?"#16a34a":"#b45309"}}>{result.isRentControlled?"Rent controlled unit":"No rent control"}</div>
-          {result.isRentControlled?(
+      {/* Rent control — Ontario only */}
+      {RENT_CONTROLLED && !result.sameYear && (
+        <div className="card fade-up d3" style={{ padding:"20px 22px", background:result.isRentControlled?"#f0fdf4":"#fffbeb", borderColor:result.isRentControlled?"#bbf7d0":"#fde68a" }}>
+          <div className="slabel" style={{ color:result.isRentControlled?"#16a34a":"#b45309" }}>{result.isRentControlled ? "Rent controlled unit" : "No rent control"}</div>
+          {result.isRentControlled ? (
             <>
-              <p style={{fontSize:13,color:"var(--t2)",lineHeight:1.75,marginBottom:10}}>Ontario caps annual rent increases for this unit at <strong style={{color:"var(--t1)"}}>2.1% for 2026</strong>. Based on your move-in rent, the legal maximum today is approximately <strong style={{color:"#16a34a"}}>{fmt(result.guidelineCap)}/mo</strong>.{result.rent>result.guidelineCap?<span style={{color:"#dc2626"}}> Your rent of {fmt(result.rent)} appears to exceed this. You may have grounds to file with the Landlord and Tenant Board.</span>:<span style={{color:"#16a34a"}}> Your rent of {fmt(result.rent)} is within the legal cap.</span>}</p>
-              <a href="https://www.ontario.ca/page/residential-rent-increases" target="_blank" rel="noopener noreferrer" style={{fontFamily:"var(--mono)",fontSize:11,color:"#16a34a",textDecoration:"none",letterSpacing:".04em"}}>Ontario rent increase guidelines &rarr;</a>
+              <p style={{ fontSize:13, color:"var(--t2)", lineHeight:1.75, marginBottom:8 }}>
+                Ontario caps annual increases at <strong style={{ color:"var(--t1)" }}>2.1% for 2026</strong>. Your legal maximum today is approximately <strong style={{ color:"#16a34a" }}>{fmt(result.guidelineCap)}/mo</strong>.
+                {result.rent > result.guidelineCap
+                  ? <span style={{ color:"#dc2626" }}> Your rent of {fmt(result.rent)} may exceed this. You may have grounds to file with the Landlord and Tenant Board.</span>
+                  : <span style={{ color:"#16a34a" }}> Your rent is within the legal cap.</span>}
+              </p>
+              <a href="https://www.ontario.ca/page/residential-rent-increases" target="_blank" rel="noopener noreferrer" style={{ fontFamily:"var(--mono)", fontSize:11, color:"#16a34a", textDecoration:"none" }}>Ontario rent guidelines &rarr;</a>
             </>
-          ):(
+          ) : (
             <>
-              <p style={{fontSize:13,color:"var(--t2)",lineHeight:1.75,marginBottom:10}}>Your unit was first occupied after November 15, 2018, so it is exempt from Ontario rent control. Your landlord can increase rent to any amount between tenancies, but must give 90 days written notice while you are living there.</p>
-              <a href="https://www.ontario.ca/page/renting-ontario-your-rights" target="_blank" rel="noopener noreferrer" style={{fontFamily:"var(--mono)",fontSize:11,color:"#b45309",textDecoration:"none",letterSpacing:".04em"}}>Know your tenant rights &rarr;</a>
+              <p style={{ fontSize:13, color:"var(--t2)", lineHeight:1.75, marginBottom:8 }}>Your unit is exempt from Ontario rent control. Your landlord can raise rent between tenancies, but must give 90 days written notice while you are living there.</p>
+              <a href="https://www.ontario.ca/page/renting-ontario-your-rights" target="_blank" rel="noopener noreferrer" style={{ fontFamily:"var(--mono)", fontSize:11, color:"#b45309", textDecoration:"none" }}>Know your rights &rarr;</a>
             </>
           )}
         </div>
       )}
 
-      <div className="card fade-up d4" style={{padding:"22px 24px"}}>
+      {/* About */}
+      <div className="card fade-up d4" style={{ padding:"18px 22px" }}>
         <div className="slabel">About this estimate</div>
-        <p style={{fontSize:13,color:"var(--t2)",lineHeight:1.75,marginBottom:14}}>This is a market estimate, not a precise measurement. Rents for comparable units vary based on building age, floor level, finishes, and landlord pricing. Use this as a reference point, not a definitive answer.</p>
-        <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-          {["CMHC Rental Market Survey (Oct 2024)","Rentals.ca Monthly Report (Feb 2025)","Anonymous local submissions"].map(s=>(
-            <span key={s} style={{padding:"3px 10px",background:"var(--bg)",border:"1px solid var(--border)",borderRadius:100,fontFamily:"var(--mono)",fontSize:9,color:"var(--t3)",letterSpacing:".04em"}}>{s}</span>
+        <p style={{ fontSize:12, color:"var(--t2)", lineHeight:1.75, marginBottom:10 }}>Market estimate only — not a professional appraisal. Rents vary by building age, floor, finishes, and landlord pricing.</p>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+          {["CMHC Rental Market Survey","Rentals.ca Monthly Report","Anonymous local submissions"].map(s => (
+            <span key={s} style={{ padding:"3px 9px", background:"var(--bg)", border:"1px solid var(--border)", borderRadius:100, fontFamily:"var(--mono)", fontSize:9, color:"var(--t3)" }}>{s}</span>
           ))}
         </div>
       </div>
 
-      {result.communityN < 20 && (
-        <div className="card fade-up d5" style={{padding:"20px 22px",background:ACCENT_LIGHT,borderColor:ACCENT_BORDER}}>
-          <div className="slabel" style={{color:ACCENT}}>Help improve this estimate</div>
-          <p style={{fontSize:13,color:"#166534",lineHeight:1.75}}>{result.communityN<5?"There are fewer than 5 renter submissions for "+hood+". Your data has already been counted and will meaningfully improve accuracy for others here.":"There are "+result.communityN+" submissions for "+hood+" so far. A few more would raise the confidence score for everyone here."}</p>
-          <p style={{fontSize:12,color:"#16a34a",lineHeight:1.6,marginTop:6}}>Share this tool with a neighbour or friend who rents in {CITY_NAME}.</p>
+      {/* Improve nudge */}
+      {communityN < 20 && (
+        <div className="card fade-up d5" style={{ padding:"18px 22px", background:ACCENT_LIGHT, borderColor:ACCENT_BORDER }}>
+          <div className="slabel" style={{ color:ACCENT }}>Help improve this estimate</div>
+          <p style={{ fontSize:13, color:"#166534", lineHeight:1.75 }}>
+            {communityN < 5
+              ? `Your data has been counted. Fewer than 5 submissions exist for ${hood} — you have already made a difference.`
+              : `${communityN} submissions so far for ${hood}. A few more would raise the confidence score.`}
+          </p>
         </div>
       )}
 
-      {showCard && (
-        <div className="card fade-up" style={{padding:"24px",background:"var(--t1)",border:"1px solid #1e293b"}}>
-          <div style={{fontFamily:"var(--mono)",fontSize:9,color:"rgba(255,255,255,.28)",letterSpacing:".1em",textTransform:"uppercase",marginBottom:14}}>Your result summary</div>
-          <div style={{fontFamily:"var(--serif)",fontSize:"clamp(17px,3vw,22px)",color:"#f1f5f9",lineHeight:1.3,marginBottom:18}}>{posCopy.headline}</div>
-          <div className="g3" style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
-            {[{label:"Your rent",val:fmt(result.rent)},{label:"Fair range",val:fmt(result.range.low)+"-"+fmt(result.range.high)},{label:"Confidence",val:conf.label}].map(({label,val})=>(
-              <div key={label} style={{background:"rgba(255,255,255,.06)",borderRadius:"var(--r-sm)",padding:"12px 10px"}}>
-                <div style={{fontFamily:"var(--mono)",fontSize:9,color:"rgba(255,255,255,.28)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:5}}>{label}</div>
-                <div style={{fontFamily:"var(--mono)",fontSize:13,fontWeight:500,color:"#f1f5f9"}}>{val}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{fontFamily:"var(--mono)",fontSize:10,color:"rgba(255,255,255,.2)",letterSpacing:".06em"}}>{CITY_NAME} &middot; {hood} &middot; {unitLabel} &middot; {SHARE_URL.replace("https://","")}</div>
-        </div>
-      )}
-
-      <div className="gcta fade-up d6" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <button className="btn-ghost" onClick={onReset}>Back to form</button>
-        <button className="btn-ghost" onClick={()=>setShareOpen(s=>!s)}>Share result {shareOpen?"up":"out"}</button>
+      {/* Actions */}
+      <div className="fade-up d5" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+        <button className="btn-ghost" onClick={onReset}>Start over</button>
+        <button className="btn-ghost" onClick={() => setShareOpen(s => !s)}>Share {shareOpen ? "↑" : "↗"}</button>
       </div>
 
       {shareOpen && (
-        <div className="card fade-up" style={{padding:"18px 20px"}}>
+        <div className="card fade-up" style={{ padding:"16px 18px" }}>
           <div className="slabel">Share your result</div>
-          <div style={{marginBottom:14}}>
-            <button onClick={()=>setShowCard(s=>!s)} style={{background:"none",border:"none",cursor:"pointer",fontFamily:"var(--mono)",fontSize:11,color:showCard?ACCENT:"var(--t3)",letterSpacing:".05em",textTransform:"uppercase",padding:0,textDecoration:"underline",textUnderlineOffset:3}}>{showCard?"Hide summary card":"Show shareable summary card"}</button>
-          </div>
-          <div className="gshare" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-            <a className="share-btn" href={"https://www.reddit.com/submit?url="+SHARE_URL+"&title="+encodeURIComponent(shareText())} target="_blank" rel="noopener noreferrer" style={{background:"#ff4500",color:"#fff"}}>Reddit</a>
-            <a className="share-btn" href={"https://twitter.com/intent/tweet?text="+encodeURIComponent(shareText())} target="_blank" rel="noopener noreferrer" style={{background:"#000",color:"#fff"}}>X</a>
-            <a className="share-btn" href={"https://www.threads.net/intent/post?text="+encodeURIComponent(shareText())} target="_blank" rel="noopener noreferrer" style={{background:"#000",color:"#fff"}}>Threads</a>
-            {navigator.share
-              ?<button className="share-btn" onClick={()=>navigator.share({title:CITY_NAME+" Rent Calculator",text:shareText(),url:SHARE_URL}).catch(()=>{})} style={{background:"var(--bg)",border:"1px solid var(--border)",color:"var(--t2)"}}>More</button>
-              :<button className="share-btn" onClick={copyLink} style={{background:copied?ACCENT_LIGHT:"var(--bg)",border:"1px solid "+(copied?ACCENT_BORDER:"var(--border)"),color:copied?ACCENT:"var(--t2)"}}>{copied?"Copied":"Copy"}</button>
-            }
+          <div className="gshare" style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
+            <a className="share-btn" href={"https://www.reddit.com/submit?url="+SHARE_URL+"&title="+encodeURIComponent(shareText())} target="_blank" rel="noopener noreferrer" style={{ background:"#ff4500", color:"#fff" }}>Reddit</a>
+            <a className="share-btn" href={"https://twitter.com/intent/tweet?text="+encodeURIComponent(shareText())} target="_blank" rel="noopener noreferrer" style={{ background:"#000", color:"#fff" }}>X</a>
+            <a className="share-btn" href={"https://www.threads.net/intent/post?text="+encodeURIComponent(shareText())} target="_blank" rel="noopener noreferrer" style={{ background:"#000", color:"#fff" }}>Threads</a>
+            <button className="share-btn" onClick={copyLink} style={{ background:copied?ACCENT_LIGHT:"var(--bg)", border:"1px solid "+(copied?ACCENT_BORDER:"var(--border)"), color:copied?ACCENT:"var(--t2)" }}>{copied ? "Copied" : "Copy"}</button>
           </div>
         </div>
       )}
@@ -351,19 +340,19 @@ function ResultPage({ result, hood, unitType, onReset }) {
   );
 }
 
-// ─── App ──────────────────────────────────────────────────────────────────────
+// ─── App ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
   const curYear = new Date().getFullYear();
 
-  const [hood,        setHood]        = useState("");
-  const [unitType,    setUnitType]    = useState("");
-  const [rent,        setRent]        = useState("");
-  const [moveInYear,  setMoveInYear]  = useState("");
-  const [parking,     setParking]     = useState(false);
-  const [utilities,   setUtilities]   = useState(false);
-  const [preNov2018,  setPreNov2018]  = useState(null);
-  const [errors,      setErrors]      = useState({});
+  const [hood,       setHood]       = useState("");
+  const [unitType,   setUnitType]   = useState("");
+  const [rent,       setRent]       = useState("");
+  const [moveInYear, setMoveInYear] = useState("");
+  const [parking,    setParking]    = useState(false);
+  const [utilities,  setUtilities]  = useState(false);
+  const [preNov2018, setPreNov2018] = useState(null);
+  const [errors,     setErrors]     = useState({});
 
   const [result,      setResult]      = useState(null);
   const [submitting,  setSubmitting]  = useState(false);
@@ -375,267 +364,300 @@ export default function App() {
 
   const [rawCount,    setRawCount]    = useState(0);
   const [countLoaded, setCountLoaded] = useState(false);
-  const displayCount  = useCountUp(countLoaded ? rawCount : 0);
+  const displayCount = useCountUp(countLoaded ? rawCount : 0);
   const [showHood,    setShowHood]    = useState(null);
 
-  useEffect(()=>{
-    const CACHE_KEY = CITY+"_count_cache";
+  // Live submission count
+  useEffect(() => {
+    const CACHE_KEY = CITY + "_count_cache";
     const cached = localStorage.getItem(CACHE_KEY);
-    if(cached){ const{count,ts}=JSON.parse(cached); if(Date.now()-ts<5*60*1000){setRawCount(count);setCountLoaded(true);} }
-    supabase.from("rent_submissions").select("*",{count:"exact",head:true}).eq("city",CITY)
-      .then(({count})=>{ const n=count??0; setRawCount(n); setCountLoaded(true); localStorage.setItem(CACHE_KEY,JSON.stringify({count:n,ts:Date.now()})); });
-  },[]);
+    if (cached) { try { const { count, ts } = JSON.parse(cached); if (Date.now()-ts < 5*60*1000) { setRawCount(count); setCountLoaded(true); } } catch {} }
+    supabase.from("rent_submissions").select("*", { count:"exact", head:true }).eq("city", CITY)
+      .then(({ count }) => { const n = count ?? 0; setRawCount(n); setCountLoaded(true); localStorage.setItem(CACHE_KEY, JSON.stringify({ count:n, ts:Date.now() })); });
+  }, []);
 
-  useEffect(()=>{
-    if(!hood||!unitType){setSmartBench(null);setCommunityN(0);setBenchReady(false);return;}
+  // Community bench on hood/unit change
+  useEffect(() => {
+    if (!hood || !unitType) { setSmartBench(null); setCommunityN(0); setBenchReady(false); return; }
     setBenchReady(false);
-    const cutoff=new Date(); cutoff.setFullYear(curYear-2);
+    const cutoff = new Date(); cutoff.setFullYear(curYear - 2);
     supabase.from("rent_submissions").select("monthly_rent")
-      .eq("city",CITY).eq("neighborhood",hood).eq("unit_type",unitType)
-      .gte("monthly_rent",500).lte("monthly_rent",8000)
-      .gte("created_at",cutoff.toISOString())
-      .then(({data})=>{
-        const base=Math.round((BASES[unitType]??BASES["1br"])*(HOODS[hood]??1));
-        if(!data?.length){setSmartBench(base);setCommunityN(0);setBenchReady(true);return;}
-        const rents=data.map(r=>r.monthly_rent),n=rents.length;
-        const w=communityWeight(n),med=median(rents);
+      .eq("city", CITY).eq("neighborhood", hood).eq("unit_type", unitType)
+      .gte("monthly_rent", 500).lte("monthly_rent", 8000)
+      .gte("created_at", cutoff.toISOString())
+      .then(({ data }) => {
+        const base = Math.round((BASES[unitType] ?? BASES["1br"]) * (HOODS[hood] ?? 1));
+        if (!data?.length) { setSmartBench(base); setCommunityN(0); setBenchReady(true); return; }
+        const n = data.length, w = communityWeight(n), med = median(data.map(r => r.monthly_rent));
         setCommunityN(n);
-        setSmartBench(w===0?base:Math.round(base*(1-w)+med*w));
+        setSmartBench(w === 0 ? base : Math.round(base*(1-w) + med*w));
         setBenchReady(true);
       });
-  },[hood,unitType]);
+  }, [hood, unitType]);
 
-  function validate(){
-    const e={};
-    if(!hood)                            e.hood="Select a neighbourhood";
-    if(!unitType)                        e.unitType="Select a unit type";
-    if(!rent||isNaN(+rent)||+rent<300)   e.rent="Enter a valid monthly rent";
-    const yr=+moveInYear;
-    if(!moveInYear||yr<1980||yr>curYear) e.moveInYear="Enter a year between 1980 and "+curYear;
-    if(RENT_CONTROLLED && preNov2018===null) e.preNov2018="Please select one";
+  function validate() {
+    const e = {};
+    if (!hood)                             e.hood = "Select a neighbourhood";
+    if (!unitType)                         e.unitType = "Select a unit type";
+    if (!rent || isNaN(+rent) || +rent<300) e.rent = "Enter a valid monthly rent";
+    const yr = +moveInYear;
+    if (!moveInYear || yr<1980 || yr>curYear) e.moveInYear = `Enter a year between 1980 and ${curYear}`;
+    if (RENT_CONTROLLED && preNov2018 === null) e.preNov2018 = "Please select one";
     return e;
   }
 
-  async function handleCalc(){
-    const e=validate();
-    if(Object.keys(e).length){setErrors(e);return;}
-    setErrors({});setSaveWarning("");setSubmitting(true);
+  async function handleCalc() {
+    const e = validate();
+    if (Object.keys(e).length) { setErrors(e); return; }
+    setErrors({}); setSaveWarning(""); setSubmitting(true);
 
-    const rentNum=+rent,yr=+moveInYear,sameYear=yr===curYear;
-    const bd    = buildBreakdown(hood,unitType,parking,utilities,smartBench,communityN);
-    const bench = bd.finalBench;
+    const rentNum = +rent, yr = +moveInYear, sameYear = yr === curYear;
+    const bd    = buildBreakdown(hood, unitType, parking, utilities, smartBench, communityN);
     const conf  = getConf(communityN);
-    const range = getRange(bench,conf.label,unitType);
-    const pos   = rentNum<range.low?"below":rentNum>range.high?"above":"within";
-    const posCopy = pos==="below"
-      ?{headline:"Your rent is lower than the local range.",sub:"Your rent is below the lower end of comparable units in this area.",color:"#1d4ed8",bg:"#eff6ff",border:"#bfdbfe"}
-      :pos==="above"
-      ?{headline:"Your rent is higher than the local range.",sub:"Your rent is above the upper end of comparable units in this area. You may be paying more than the market rate.",color:"#b45309",bg:"#fffbeb",border:"#fde68a"}
-      :{headline:"Your rent is within the local range.",sub:"Your rent falls within the estimated range for comparable units in "+hood+". It appears to be in line with the local market.",color:ACCENT,bg:ACCENT_LIGHT,border:ACCENT_BORDER};
+    const range = getRange(bd.finalBench, conf.label, unitType);
+    const pos   = rentNum < range.low ? "below" : rentNum > range.high ? "above" : "within";
+    const posCopy = pos === "below"
+      ? { headline:"Your rent is lower than the local range.",  sub:"Your rent is below the lower end of comparable units in this area.", color:"#1d4ed8", bg:"#eff6ff", border:"#bfdbfe" }
+      : pos === "above"
+      ? { headline:"Your rent is higher than the local range.", sub:"Your rent is above the upper end of comparable units in this area. You may be paying more than the market rate.", color:"#b45309", bg:"#fffbeb", border:"#fde68a" }
+      : { headline:"Your rent is within the local range.",      sub:`Your rent falls within the estimated range for comparable units in ${hood}.`, color:ACCENT, bg:ACCENT_LIGHT, border:ACCENT_BORDER };
 
-    const yearsAgo     = Math.max(0,curYear-yr);
-    const moveinBench  = Math.round(bench*Math.pow(1-INFLATION,yearsAgo));
-    const guidelineCap = (!sameYear&&RENT_CONTROLLED&&preNov2018) ? calcGuidelineCap(moveinBench,yr) : null;
+    const yearsAgo    = Math.max(0, curYear - yr);
+    const moveinBench = Math.round(bd.finalBench * Math.pow(1-INFLATION, yearsAgo));
+    const guidelineCap = (!sameYear && RENT_CONTROLLED && preNov2018) ? calcGuidelineCap(moveinBench, yr) : null;
 
-    setResult({rent:rentNum,bench,range,conf,pos,posCopy,breakdown:bd,
-      moveinBench,guidelineCap,isRentControlled:preNov2018===true,
-      sameYear,moveInYear:yr,communityN});
+    setResult({ rent:rentNum, range, conf, pos, posCopy, breakdown:bd, moveinBench, guidelineCap, isRentControlled:preNov2018===true, sameYear, moveInYear:yr, communityN });
 
-    try{
-      const last=Number(localStorage.getItem(COOLDOWN_KEY)??0);
-      if(Date.now()-last>=COOLDOWN_MS){
-        const{error}=await supabase.from("rent_submissions").insert({
-          neighborhood:hood,unit_type:unitType,monthly_rent:rentNum,
-          move_in_year:yr,includes_parking:parking,includes_utilities:utilities,city:CITY,
+    try {
+      const last = Number(localStorage.getItem(COOLDOWN_KEY) ?? 0);
+      if (Date.now() - last >= COOLDOWN_MS) {
+        const { error } = await supabase.from("rent_submissions").insert({
+          neighborhood:hood, unit_type:unitType, monthly_rent:rentNum,
+          move_in_year:yr, includes_parking:parking, includes_utilities:utilities, city:CITY,
         });
-        if(!error){localStorage.setItem(COOLDOWN_KEY,String(Date.now()));setRawCount(p=>p+1);}
+        if (!error) { localStorage.setItem(COOLDOWN_KEY, String(Date.now())); setRawCount(p => p+1); }
         else setSaveWarning("Result shown. Submission was not saved.");
       }
-    }catch{setSaveWarning("Result shown. Submission was not saved.");}
-    finally{setSubmitting(false);}
+    } catch { setSaveWarning("Result shown. Submission was not saved."); }
+    finally { setSubmitting(false); }
   }
 
-  function handleReset(){
-    setResult(null);setHood("");setUnitType("");setRent("");setMoveInYear("");
-    setParking(false);setUtilities(false);setPreNov2018(null);
-    setErrors({});setSaveWarning("");
+  function handleReset() {
+    setResult(null); setHood(""); setUnitType(""); setRent(""); setMoveInYear("");
+    setParking(false); setUtilities(false); setPreNov2018(null);
+    setErrors({}); setSaveWarning("");
   }
 
-  const previewBench = benchReady&&smartBench!=null
-    ? Math.round(smartBench)+(parking?ADDONS.parking:0)+(utilities?ADDONS.utilities:0)
+  const previewBench = benchReady && smartBench != null
+    ? Math.round(smartBench) + (parking ? ADDONS.parking : 0) + (utilities ? ADDONS.utilities : 0)
     : null;
-  const benchLabel = communityN>=20?"Community data ("+communityN+" submissions)":communityN>=5?"Blended - "+communityN+" submissions + CMHC":"CMHC baseline";
+  const benchLabel = communityN >= 20 ? `Community data (${communityN} submissions)` : communityN >= 5 ? `Blended — ${communityN} submissions + CMHC` : "CMHC baseline";
 
-  const inpStyle = {width:"100%",padding:"11px 14px",background:"var(--bg-card)",border:"1.5px solid var(--border)",borderRadius:"var(--r-md)",color:"var(--t1)",fontSize:15,transition:"border-color .15s",appearance:"none",fontFamily:"var(--sans)"};
-  const selStyle = {...inpStyle,backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")",backgroundRepeat:"no-repeat",backgroundPosition:"right 13px center",paddingRight:36,cursor:"pointer"};
+  const selStyle = { width:"100%", padding:"10px 13px", background:"var(--bg-card)", border:"1.5px solid var(--border)", borderRadius:"var(--r-md)", color:"var(--t1)", fontSize:14, appearance:"none", fontFamily:"var(--sans)", backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")", backgroundRepeat:"no-repeat", backgroundPosition:"right 12px center", paddingRight:34, cursor:"pointer" };
+  const inpStyle = { width:"100%", padding:"10px 13px", background:"var(--bg-card)", border:"1.5px solid var(--border)", borderRadius:"var(--r-md)", color:"var(--t1)", fontSize:14, fontFamily:"var(--sans)" };
 
-  if(showHood) return(
+  if (showHood) return (
     <NeighbourhoodPage
       hood={OTTAWA_HOODS[showHood]}
       city={OTTAWA_CITY}
-      onBack={()=>{setShowHood(null);window.scrollTo(0,0);}}
+      onBack={() => { setShowHood(null); window.scrollTo(0,0); }}
     />
   );
 
-  return(
+  return (
     <><style>{CSS}</style>
-    <div style={{minHeight:"100vh"}}>
+    <div style={{ minHeight:"100vh" }}>
 
-      <header style={{background:"var(--nav)",borderBottom:"1px solid rgba(255,255,255,.06)",position:"sticky",top:0,zIndex:100}}>
-        <div style={{maxWidth:"var(--max)",margin:"0 auto",padding:"0 20px",display:"flex",alignItems:"center",justifyContent:"space-between",height:56}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <a href="https://fairrent.ca" style={{width:28,height:28,background:ACCENT,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",textDecoration:"none",flexShrink:0}}>
-              <span style={{fontFamily:"var(--mono)",fontSize:11,fontWeight:500,color:"#fff"}}>FR</span>
+      {/* NAV */}
+      <header style={{ background:"var(--nav)", borderBottom:"1px solid rgba(255,255,255,.06)", position:"sticky", top:0, zIndex:100 }}>
+        <div style={{ maxWidth:1200, margin:"0 auto", padding:"0 32px", display:"flex", alignItems:"center", justifyContent:"space-between", height:56 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <a href="https://fairrent.ca" style={{ width:28, height:28, background:ACCENT, borderRadius:7, display:"flex", alignItems:"center", justifyContent:"center", textDecoration:"none", flexShrink:0 }}>
+              <span style={{ fontFamily:"var(--mono)", fontSize:11, fontWeight:500, color:"#fff" }}>FR</span>
             </a>
-            <span style={{fontFamily:"var(--sans)",fontSize:14,fontWeight:600,color:"#f8fafc",letterSpacing:"-.01em"}}>{CITY_NAME} Rent Calculator</span>
+            <span style={{ fontFamily:"var(--sans)", fontSize:14, fontWeight:600, color:"#f8fafc", letterSpacing:"-.01em" }}>{CITY_NAME} Rent Calculator</span>
           </div>
-          {countLoaded&&(
-            <div style={{display:"flex",alignItems:"center",gap:7}}>
-              <div className="live-dot"/>
-              <span aria-live="polite" style={{fontFamily:"var(--mono)",fontSize:11,color:"rgba(255,255,255,.35)",letterSpacing:".04em"}}>{displayCount.toLocaleString()} submissions</span>
-            </div>
-          )}
+          <div style={{ display:"flex", alignItems:"center", gap:20 }}>
+            {countLoaded && (
+              <div style={{ display:"flex", alignItems:"center", gap:7 }}>
+                <div className="live-dot"/>
+                <span style={{ fontFamily:"var(--mono)", fontSize:11, color:"rgba(255,255,255,.35)", letterSpacing:".04em" }}>{displayCount.toLocaleString()} submissions</span>
+              </div>
+            )}
+            <a href="https://fairrent.ca" style={{ fontFamily:"var(--mono)", fontSize:11, color:"rgba(255,255,255,.35)", textDecoration:"none", letterSpacing:".05em", textTransform:"uppercase" }}>All cities</a>
+          </div>
         </div>
       </header>
 
-      <main style={{maxWidth:"var(--max)",margin:"0 auto",padding:"40px 20px 80px"}}>
-        {!result ? (
-          <>
-            <div style={{marginBottom:24}}>
-              <h1 style={{fontFamily:"var(--sans)",fontSize:"clamp(22px,4vw,32px)",fontWeight:700,lineHeight:1.15,letterSpacing:"-.02em",marginBottom:10,color:"var(--t1)"}}>
-                See if you are overpaying for rent in {CITY_NAME}
-              </h1>
-              <p style={{fontSize:15,color:"var(--t2)",lineHeight:1.7,maxWidth:480}}>
-                Based on CMHC data and real renter submissions. Free. Anonymous. No account needed.
-              </p>
-            </div>
+      {/* MAIN */}
+      <div style={{ maxWidth:1200, margin:"0 auto", padding:"40px 32px 80px" }}>
 
-            <div style={{marginBottom:28}}>
-              <div style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--t3)",textTransform:"uppercase",letterSpacing:".1em",marginBottom:12}}>Browse by neighbourhood</div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                {Object.keys(OTTAWA_HOODS).map(slug=>(
-                  <button key={slug} onClick={()=>setShowHood(slug)} style={{padding:"6px 14px",background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:100,fontFamily:"var(--mono)",fontSize:11,color:"var(--t2)",cursor:"pointer",letterSpacing:".04em",transition:"border-color .15s,color .15s"}}
-                    onMouseOver={e=>{e.currentTarget.style.borderColor=ACCENT_BORDER;e.currentTarget.style.color=ACCENT;}}
-                    onMouseOut={e=>{e.currentTarget.style.borderColor="var(--border)";e.currentTarget.style.color="var(--t2)";}}>
-                    {OTTAWA_HOODS[slug].name} &rarr;
-                  </button>
-                ))}
-              </div>
-            </div>
+        {/* Page heading + hood pills */}
+        <div style={{ marginBottom:32 }}>
+          <h1 style={{ fontFamily:"var(--sans)", fontSize:"clamp(22px,3vw,34px)", fontWeight:700, lineHeight:1.15, letterSpacing:"-.02em", marginBottom:10, color:"var(--t1)" }}>
+            See if you are overpaying for rent in {CITY_NAME}
+          </h1>
+          <p style={{ fontSize:15, color:"var(--t2)", lineHeight:1.7, maxWidth:560, marginBottom:20 }}>
+            Based on CMHC data and real renter submissions. Free. Anonymous. No account needed.
+          </p>
+          <div style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--t3)", textTransform:"uppercase", letterSpacing:".1em", marginBottom:10 }}>Browse by neighbourhood</div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {Object.keys(OTTAWA_HOODS).map(slug => (
+              <button key={slug} className="hood-pill" onClick={() => setShowHood(slug)}>
+                {OTTAWA_HOODS[slug].name} &rarr;
+              </button>
+            ))}
+          </div>
+        </div>
 
-            <div className="card" style={{padding:"28px 24px",display:"flex",flexDirection:"column",gap:20}}>
+        {/* Two-column grid */}
+        <div className="page-grid">
 
-              <div className="g2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  <label style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--t3)",letterSpacing:".08em",textTransform:"uppercase"}}>Neighbourhood</label>
-                  <select style={{...selStyle,borderColor:errors.hood?"#dc2626":undefined}} value={hood} onChange={e=>setHood(e.target.value)}>
-                    <option value="">Select...</option>
-                    {NEIGHBORHOODS.map(n=><option key={n} value={n}>{n}</option>)}
-                  </select>
-                  {errors.hood&&<span className="err-msg">{errors.hood}</span>}
-                </div>
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  <label style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--t3)",letterSpacing:".08em",textTransform:"uppercase"}}>Unit type</label>
-                  <select style={{...selStyle,borderColor:errors.unitType?"#dc2626":undefined}} value={unitType} onChange={e=>setUnitType(e.target.value)}>
-                    <option value="">Select...</option>
-                    {UNITS.map(u=><option key={u.key} value={u.key}>{u.label}</option>)}
-                  </select>
-                  {errors.unitType&&<span className="err-msg">{errors.unitType}</span>}
-                </div>
-              </div>
+          {/* LEFT — Form */}
+          <div>
+            <div className="card" style={{ padding:"28px 24px" }}>
+              <div style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--t3)", textTransform:"uppercase", letterSpacing:".1em", marginBottom:20 }}>Your rental details</div>
 
-              <div className="g2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  <label style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--t3)",letterSpacing:".08em",textTransform:"uppercase"}}>Monthly rent</label>
-                  <input style={{...inpStyle,borderColor:errors.rent?"#dc2626":undefined}} className="inp" type="number" placeholder="e.g. 2200" value={rent} onChange={e=>setRent(e.target.value)}/>
-                  {errors.rent&&<span className="err-msg">{errors.rent}</span>}
-                </div>
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  <label style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--t3)",letterSpacing:".08em",textTransform:"uppercase"}}>Year moved in</label>
-                  <input style={{...inpStyle,borderColor:errors.moveInYear?"#dc2626":undefined}} className="inp" type="number" placeholder={String(curYear)} value={moveInYear} onChange={e=>setMoveInYear(e.target.value)}/>
-                  {errors.moveInYear&&<span className="err-msg">{errors.moveInYear}</span>}
-                </div>
-              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
 
-              {RENT_CONTROLLED && (
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  <label style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--t3)",letterSpacing:".08em",textTransform:"uppercase"}}>Was your unit first occupied before Nov 15, 2018?</label>
-                  <div style={{display:"flex",gap:10}}>
-                    <button type="button" className={"opt-btn"+(preNov2018===true?" on":"")} onClick={()=>setPreNov2018(true)}>Yes - rent controlled</button>
-                    <button type="button" className={"opt-btn"+(preNov2018===false?" on":"")} onClick={()=>setPreNov2018(false)}>No - not controlled</button>
+                <div className="g2" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    <label style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--t3)", letterSpacing:".08em", textTransform:"uppercase" }}>Neighbourhood</label>
+                    <select style={{ ...selStyle, borderColor:errors.hood?"#dc2626":undefined }} value={hood} onChange={e => setHood(e.target.value)}>
+                      <option value="">Select...</option>
+                      {NEIGHBORHOODS.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                    {errors.hood && <span className="err-msg">{errors.hood}</span>}
                   </div>
-                  {errors.preNov2018&&<span className="err-msg">{errors.preNov2018}</span>}
-                  <p style={{fontSize:11,color:"var(--t3)",lineHeight:1.6}}>Units first occupied before Nov 15, 2018 are subject to Ontario's annual rent increase guideline (2.1% in 2026).</p>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    <label style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--t3)", letterSpacing:".08em", textTransform:"uppercase" }}>Unit type</label>
+                    <select style={{ ...selStyle, borderColor:errors.unitType?"#dc2626":undefined }} value={unitType} onChange={e => setUnitType(e.target.value)}>
+                      <option value="">Select...</option>
+                      {UNITS.map(u => <option key={u.key} value={u.key}>{u.label}</option>)}
+                    </select>
+                    {errors.unitType && <span className="err-msg">{errors.unitType}</span>}
+                  </div>
                 </div>
-              )}
 
-              <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                <label style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--t3)",letterSpacing:".08em",textTransform:"uppercase"}}>Rent includes</label>
-                <div className="g2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                  {[[parking,setParking,"Parking","+$250/mo to benchmark"],[utilities,setUtilities,"Utilities","+$120/mo to benchmark"]].map(([val,setVal,label,sub])=>(
-                    <button key={label} type="button" className={"toggle-btn"+(val?" on":"")} onClick={()=>setVal(v=>!v)}>
-                      <div style={{width:34,height:18,borderRadius:18,background:val?ACCENT:"#e2e8f0",position:"relative",flexShrink:0,transition:"background .15s"}}>
-                        <div style={{position:"absolute",top:2,left:val?18:2,width:14,height:14,borderRadius:"50%",background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,.2)",transition:"left .15s"}}/>
-                      </div>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:600,color:"var(--t1)"}}>{label}</div>
-                        <div style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--t3)",marginTop:1}}>{sub}</div>
-                      </div>
-                    </button>
+                <div className="g2" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    <label style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--t3)", letterSpacing:".08em", textTransform:"uppercase" }}>Monthly rent</label>
+                    <input style={{ ...inpStyle, borderColor:errors.rent?"#dc2626":undefined }} type="number" placeholder="e.g. 2200" value={rent} onChange={e => setRent(e.target.value)}/>
+                    {errors.rent && <span className="err-msg">{errors.rent}</span>}
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    <label style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--t3)", letterSpacing:".08em", textTransform:"uppercase" }}>Year moved in</label>
+                    <input style={{ ...inpStyle, borderColor:errors.moveInYear?"#dc2626":undefined }} type="number" placeholder={String(curYear)} value={moveInYear} onChange={e => setMoveInYear(e.target.value)}/>
+                    {errors.moveInYear && <span className="err-msg">{errors.moveInYear}</span>}
+                  </div>
+                </div>
+
+                {RENT_CONTROLLED && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    <label style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--t3)", letterSpacing:".08em", textTransform:"uppercase" }}>Unit first occupied before Nov 15, 2018?</label>
+                    <div style={{ display:"flex", gap:10 }}>
+                      <button type="button" className={"opt-btn"+(preNov2018===true?" on":"")} onClick={() => setPreNov2018(true)}>Yes — rent controlled</button>
+                      <button type="button" className={"opt-btn"+(preNov2018===false?" on":"")} onClick={() => setPreNov2018(false)}>No — not controlled</button>
+                    </div>
+                    {errors.preNov2018 && <span className="err-msg">{errors.preNov2018}</span>}
+                    <p style={{ fontSize:11, color:"var(--t3)", lineHeight:1.6 }}>Units before Nov 15, 2018 are subject to Ontario's annual guideline (2.1% in 2026).</p>
+                  </div>
+                )}
+
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  <label style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--t3)", letterSpacing:".08em", textTransform:"uppercase" }}>Rent includes</label>
+                  <div className="g2" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                    {[[parking, setParking, "Parking", "+$250/mo to benchmark"], [utilities, setUtilities, "Utilities", "+$120/mo to benchmark"]].map(([val, setVal, label, sub]) => (
+                      <button key={label} type="button" className={"toggle-btn"+(val?" on":"")} onClick={() => setVal(v => !v)}>
+                        <div style={{ width:32, height:17, borderRadius:17, background:val?ACCENT:"#e2e8f0", position:"relative", flexShrink:0, transition:"background .15s" }}>
+                          <div style={{ position:"absolute", top:2, left:val?17:2, width:13, height:13, borderRadius:"50%", background:"#fff", boxShadow:"0 1px 3px rgba(0,0,0,.2)", transition:"left .15s" }}/>
+                        </div>
+                        <div>
+                          <div style={{ fontSize:13, fontWeight:600, color:"var(--t1)" }}>{label}</div>
+                          <div style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--t3)", marginTop:1 }}>{sub}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Live benchmark preview */}
+                {hood && unitType && benchReady && previewBench != null && (
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:10, padding:"12px 14px", background:ACCENT_LIGHT, border:"1px solid "+ACCENT_BORDER, borderRadius:"var(--r-md)" }}>
+                    <div>
+                      <div style={{ fontFamily:"var(--mono)", fontSize:9, color:"var(--t3)", textTransform:"uppercase", letterSpacing:".07em", marginBottom:3 }}>{CITY_NAME} benchmark — {hood}</div>
+                      <div style={{ fontFamily:"var(--mono)", fontSize:17, fontWeight:500, color:"var(--t1)" }}>{fmt(previewBench)}/mo</div>
+                    </div>
+                    <span style={{ padding:"3px 10px", background:"var(--bg-card)", border:"1px solid var(--border)", borderRadius:100, fontFamily:"var(--mono)", fontSize:9, color:communityN>=5?ACCENT:"var(--t3)", letterSpacing:".07em", textTransform:"uppercase" }}>{benchLabel}</span>
+                  </div>
+                )}
+
+                <button className="btn-primary" onClick={handleCalc} disabled={submitting}>
+                  {submitting ? "Saving..." : "Compare my rent"}
+                </button>
+                <p style={{ textAlign:"center", fontFamily:"var(--mono)", fontSize:10, color:"var(--t3)", letterSpacing:".05em" }}>
+                  Anonymous &middot; no account &middot; no personal data stored
+                </p>
+              </div>
+            </div>
+
+            {/* Market snapshot */}
+            <div style={{ marginTop:24, padding:"22px 24px", background:"var(--bg-card)", border:"1px solid var(--border)", borderRadius:"var(--r-lg)", boxShadow:"var(--sh)" }}>
+              <div style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--t3)", textTransform:"uppercase", letterSpacing:".1em", marginBottom:14 }}>{CITY_NAME} rent at a glance (2025)</div>
+              {MARKET_SNAPSHOT.map(({ label, val }) => (
+                <div key={label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+                  <span style={{ fontSize:13, color:"var(--t2)" }}>{label}</span>
+                  <span style={{ fontFamily:"var(--mono)", fontSize:13, fontWeight:500, color:"var(--t1)" }}>{val}</span>
+                </div>
+              ))}
+              <p style={{ fontSize:11, color:"var(--t3)", lineHeight:1.65, marginTop:12 }}>Ontario rent control applies to units first occupied before November 15, 2018. The 2026 guideline is 2.1%.</p>
+              <p style={{ fontSize:10, color:"var(--t3)", marginTop:6, fontFamily:"var(--mono)" }}>Sources: CMHC 2025 · Rentals.ca Feb 2025</p>
+            </div>
+
+            {saveWarning && (
+              <div style={{ marginTop:12, fontSize:12, color:"#92400e", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:"var(--r-md)", padding:"12px 16px" }}>{saveWarning}</div>
+            )}
+          </div>
+
+          {/* RIGHT — Result or placeholder */}
+          <div className="result-col">
+            {result ? (
+              <ResultPanel result={result} hood={hood} unitType={unitType} onReset={handleReset}/>
+            ) : (
+              <div className="card" style={{ padding:"32px 24px", textAlign:"center" }}>
+                <div style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--t3)", textTransform:"uppercase", letterSpacing:".1em", marginBottom:20 }}>Your result will appear here</div>
+                <div style={{ width:56, height:56, borderRadius:"50%", background:ACCENT_LIGHT, border:"2px solid "+ACCENT_BORDER, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" stroke={ACCENT} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </div>
+                <p style={{ fontSize:14, color:"var(--t2)", lineHeight:1.7, maxWidth:280, margin:"0 auto 24px" }}>
+                  Fill in your details on the left and click Compare my rent to see how your rent compares to the local market.
+                </p>
+                <div style={{ display:"flex", flexDirection:"column", gap:10, textAlign:"left", padding:"16px", background:"var(--bg)", borderRadius:"var(--r-md)", border:"1px solid var(--border)" }}>
+                  <div style={{ fontFamily:"var(--mono)", fontSize:10, color:"var(--t3)", textTransform:"uppercase", letterSpacing:".1em", marginBottom:4 }}>What you will get</div>
+                  {["Fair rent range for your unit type and neighbourhood","Percentage above or below the market median","Confidence score based on local submission volume","Rent control status and legal cap (Ontario units)"].map(item => (
+                    <div key={item} style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+                      <div style={{ width:5, height:5, borderRadius:"50%", background:ACCENT, flexShrink:0, marginTop:6 }}/>
+                      <span style={{ fontSize:13, color:"var(--t2)" }}>{item}</span>
+                    </div>
                   ))}
                 </div>
               </div>
-
-              {hood&&unitType&&benchReady&&previewBench!=null&&(
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,padding:"12px 16px",background:ACCENT_LIGHT,border:"1px solid "+ACCENT_BORDER,borderRadius:"var(--r-md)"}}>
-                  <div>
-                    <div style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--t3)",textTransform:"uppercase",letterSpacing:".07em",marginBottom:3}}>{CITY_NAME} benchmark - {hood}</div>
-                    <div style={{fontFamily:"var(--mono)",fontSize:16,fontWeight:500,color:"var(--t1)"}}>{fmt(previewBench)}/mo</div>
-                  </div>
-                  <span style={{padding:"3px 10px",background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:100,fontFamily:"var(--mono)",fontSize:9,color:communityN>=5?ACCENT:"var(--t3)",letterSpacing:".07em",textTransform:"uppercase"}}>{benchLabel}</span>
-                </div>
-              )}
-
-              <button className="btn-primary" onClick={handleCalc} disabled={submitting}>
-                {submitting?"Saving...":"Compare my rent"}
-              </button>
-              <p style={{textAlign:"center",fontFamily:"var(--mono)",fontSize:10,color:"var(--t3)",letterSpacing:".05em"}}>
-                Anonymous &middot; no account &middot; no personal data stored
-              </p>
-            </div>
-          </>
-        ) : (
-          <ResultPage result={result} hood={hood} unitType={unitType} onReset={handleReset}/>
-        )}
-
-        {saveWarning&&(
-          <div style={{marginTop:12,fontSize:12,color:"#92400e",background:"#fffbeb",border:"1px solid #fde68a",borderRadius:"var(--r-md)",padding:"12px 16px"}}>{saveWarning}</div>
-        )}
-
-        <div style={{marginTop:40,padding:"24px",background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:"var(--r-lg)",boxShadow:"var(--sh)"}}>
-          <div style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--t3)",textTransform:"uppercase",letterSpacing:".1em",marginBottom:16}}>{CITY_NAME} rent at a glance (2025)</div>
-          {MARKET_SNAPSHOT.map(({label,val})=>(
-            <div key={label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid var(--border)"}}>
-              <span style={{fontSize:13,color:"var(--t2)"}}>{label}</span>
-              <span style={{fontFamily:"var(--mono)",fontSize:13,fontWeight:500,color:"var(--t1)"}}>{val}</span>
-            </div>
-          ))}
-          <p style={{fontSize:11,color:"var(--t3)",lineHeight:1.65,marginTop:14}}>Ontario rent control applies to units first occupied before November 15, 2018. The 2026 annual guideline is 2.1%.</p>
-          <p style={{fontSize:10,color:"var(--t3)",marginTop:6,fontFamily:"var(--mono)"}}>CMHC 2025 Rental Market Report · Rentals.ca Feb 2025</p>
+            )}
+          </div>
         </div>
 
-        <div style={{marginTop:40,paddingTop:22,borderTop:"1px solid var(--border)"}}>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-            {["CMHC Rental Market Survey (Oct 2024)","Rentals.ca Monthly Report (Feb 2025)","Local renter data"].map(s=>(
-              <span key={s} style={{padding:"3px 10px",background:"var(--bg-card)",border:"1px solid var(--border)",borderRadius:100,fontFamily:"var(--mono)",fontSize:9,color:"var(--t3)"}}>{s}</span>
+        {/* Footer */}
+        <div style={{ marginTop:48, paddingTop:20, borderTop:"1px solid var(--border)", display:"flex", flexWrap:"wrap", justifyContent:"space-between", alignItems:"center", gap:16 }}>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+            {["CMHC Rental Market Survey (Oct 2024)","Rentals.ca Monthly Report (Feb 2025)","Local renter data"].map(s => (
+              <span key={s} style={{ padding:"3px 10px", background:"var(--bg-card)", border:"1px solid var(--border)", borderRadius:100, fontFamily:"var(--mono)", fontSize:9, color:"var(--t3)" }}>{s}</span>
             ))}
           </div>
-          <p style={{fontSize:11,color:"var(--t3)",lineHeight:1.7}}>
-            Data last updated: CMHC October 2024 · Rentals.ca February 2025. Not legal or financial advice.{" "}
-            <a href="https://fairrent.ca" style={{color:"var(--t3)",textDecoration:"underline"}}>How we calculate estimates</a>
+          <p style={{ fontSize:11, color:"var(--t3)", lineHeight:1.7 }}>
+            Not legal or financial advice. <a href="https://fairrent.ca" style={{ color:"var(--t3)", textDecoration:"underline" }}>fairrent.ca</a>
           </p>
         </div>
-      </main>
+      </div>
     </div>
     </>
   );

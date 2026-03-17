@@ -540,10 +540,10 @@ export default function App() {
     const pos = rentNum < range.low ? "below" : rentNum > range.high ? "above" : "within";
     const diff = pos==="below" ? fmt(range.low-rentNum) : pos==="above" ? fmt(rentNum-range.high) : null;
     const posCopy = pos==="below"
-      ? { headline:"Your rent is below the estimated fair range.", sub:"You are paying approximately "+diff+"/mo less than the lower end of comparable units in this area. This is a good position to be in.", color:"#1d4ed8", bg:"#eff6ff", border:"#bfdbfe" }
+      ? { headline:"Your rent is lower than the local range.", sub:"Your rent is below the lower end of comparable units in this area. This is a good position to be in.", color:"#1d4ed8", bg:"#eff6ff", border:"#bfdbfe" }
       : pos==="above"
-      ? { headline:"Your rent is above the estimated fair range.", sub:"You are paying approximately "+diff+"/mo more than the upper end of comparable units in this area. It may be worth reviewing what is included in your rent.", color:"#b45309", bg:"#fffbeb", border:"#fde68a" }
-      : { headline:"Your rent is within the estimated fair range.", sub:"Your rent falls within the range we estimate for comparable units in "+hood+". This suggests your rent is broadly in line with the local market.", color:"#16a34a", bg:"#f0fdf4", border:"#bbf7d0" };
+      ? { headline:"Your rent is higher than the local range.", sub:"Your rent is above the upper end of comparable units in this area. You may be paying more than the market rate.", color:"#b45309", bg:"#fffbeb", border:"#fde68a" }
+      : { headline:"Your rent is within the local range.", sub:"Your rent falls within the estimated range for comparable units in "+hood+". It appears to be in line with the local market.", color:"#16a34a", bg:"#f0fdf4", border:"#bbf7d0" };
 
     const yearsAgo    = Math.max(0, curYear-yr);
     const moveinBench = Math.round(bench * Math.pow(1-INFLATION, yearsAgo));

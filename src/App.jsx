@@ -150,7 +150,7 @@ const CSS = [
   ".fade-up{opacity:0;transform:translateY(10px);animation:fu .4s ease forwards;}",
   "@keyframes fu{to{opacity:1;transform:none;}}",
   ".d1{animation-delay:.04s}.d2{animation-delay:.09s}.d3{animation-delay:.14s}.d4{animation-delay:.19s}.d5{animation-delay:.24s}.d6{animation-delay:.29s}.d7{animation-delay:.34s}",
-  "@media(max-width:580px){.g2{grid-template-columns:1fr!important}.g3{grid-template-columns:1fr 1fr!important}.gcta{grid-template-columns:1fr!important}.gshare{grid-template-columns:1fr 1fr!important}}"
+  "@media(max-width:580px){.g2{grid-template-columns:1fr!important}.g3{grid-template-columns:1fr 1fr!important}.gcta{grid-template-columns:1fr!important}.gshare{grid-template-columns:1fr 1fr!important}}",
   "@media(prefers-reduced-motion:reduce){.fade-up{animation:none!important;opacity:1!important;transform:none!important;}*{transition-duration:.01ms!important;}}",
 ].join("\n");
 

@@ -1,22 +1,143 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="shortcut icon" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1c2b36" />
-    <title>Ottawa Rent Calculator — Fair Rent Canada</title>
-    <meta name="description" content="Check if your Ottawa rent is fair. Free, anonymous comparison tool based on CMHC data and real renter submissions. No account required." />
-    <meta property="og:title" content="Ottawa Rent Calculator — Fair Rent Canada" />
-    <meta property="og:description" content="Check if your Ottawa rent is fair. Free and anonymous." />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://ottawafairrent.ca" />
-    <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://ottawafairrent.ca" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1c2b36" />
+  <title>Ottawa Rent Calculator | Is My Rent Fair? | Fair Rent Canada</title>
+  <meta name="description" content="Check if your Ottawa rent is fair. Compare your rent to real data from CMHC and Ottawa renters by neighbourhood. Free, anonymous, no account needed." />
+  <link rel="canonical" href="https://ottawafairrent.ca/" />
+  <meta name="robots" content="index, follow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="shortcut icon" href="/favicon.svg" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://ottawafairrent.ca/" />
+  <meta property="og:title" content="Ottawa Rent Calculator | Is My Rent Fair?" />
+  <meta property="og:description" content="Free, anonymous Ottawa rent comparison tool based on CMHC data and real renter submissions." />
+  <meta property="og:site_name" content="Fair Rent Canada" />
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"WebApplication","name":"Ottawa Rent Calculator","url":"https://ottawafairrent.ca","description":"Free tool to check if your Ottawa rent is fair. Compare your rent to real data from CMHC and Ottawa renters by neighbourhood.","applicationCategory":"FinanceApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"CAD"},"publisher":{"@type":"Organization","name":"Fair Rent Canada","url":"https://fairrent.ca"},"areaServed":{"@type":"City","name":"Ottawa","containedInPlace":{"@type":"Country","name":"Canada"}}}
+  </script>
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the average rent for a 1-bedroom in Ottawa?","acceptedAnswer":{"@type":"Answer","text":"The average rent for a 1-bedroom in Ottawa is approximately $2,050 per month as of 2025, based on CMHC data. Rents range from about $1,750 in areas like Barrhaven and Vanier to over $2,300 in Glebe, Westboro, and Rockcliffe Park."}},{"@type":"Question","name":"What is the average rent for a 2-bedroom in Ottawa?","acceptedAnswer":{"@type":"Answer","text":"The average rent for a 2-bedroom in Ottawa is approximately $2,650 per month as of 2025. Rents vary from around $2,200 in more affordable areas to over $3,100 in premium neighbourhoods."}},{"@type":"Question","name":"Is rent controlled in Ottawa?","acceptedAnswer":{"@type":"Answer","text":"Units first occupied before November 15, 2018 are subject to Ontario rent control. The 2026 annual guideline is 2.1%. Units first occupied after that date are not rent controlled between tenancies."}},{"@type":"Question","name":"What is the average rent in Vanier, Ottawa?","acceptedAnswer":{"@type":"Answer","text":"Vanier is one of Ottawa's most affordable neighbourhoods. Average rents run about 15% below the Ottawa average, making it one of the best value options close to the downtown core."}},{"@type":"Question","name":"What is the average rent in the Glebe, Ottawa?","acceptedAnswer":{"@type":"Answer","text":"The Glebe is one of Ottawa's most sought-after neighbourhoods. Rents typically run about 20% above the Ottawa average, reflecting strong demand and proximity to the Rideau Canal."}},{"@type":"Question","name":"What is the average rent in Westboro, Ottawa?","acceptedAnswer":{"@type":"Answer","text":"Westboro rents typically run about 18% above the Ottawa city average. It is a high-demand neighbourhood in Ottawa's west end, known for independent shops and proximity to the Ottawa River."}},{"@type":"Question","name":"How do I know if my Ottawa rent is fair?","acceptedAnswer":{"@type":"Answer","text":"Use the Ottawa Rent Calculator on this page. Enter your neighbourhood, unit type, and monthly rent. We compare your rent to CMHC data and anonymous submissions from Ottawa renters to show whether you are above, within, or below the local market range."}}]}
+  </script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:#f5f5f5;color:#111;line-height:1.5;}
+    .s-nav{background:#1c2b36;border-bottom:3px solid #1a5c34;padding:0 16px;height:48px;display:flex;align-items:center;justify-content:space-between;}
+    .s-nav a{font-size:13px;font-weight:700;color:#fff;text-decoration:none;}
+    .s-nav span{font-size:12px;color:#aab8c2;}
+    .s-wrap{max-width:900px;margin:0 auto;padding:28px 16px 48px;}
+    .s-h1{font-size:clamp(20px,4vw,30px);font-weight:700;color:#111;margin-bottom:10px;line-height:1.2;}
+    .s-intro{font-size:14px;color:#444;line-height:1.65;max-width:640px;margin-bottom:24px;}
+    .s-section{margin-bottom:24px;}
+    .s-h2{font-size:16px;font-weight:700;color:#111;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #ccc;}
+    .s-table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #ccc;}
+    .s-table th{padding:8px 12px;background:#f0f0f0;border:1px solid #ccc;font-weight:700;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:#444;}
+    .s-table td{padding:8px 12px;border:1px solid #e8e8e8;color:#111;}
+    .s-table td:nth-child(2){font-family:"Courier New",monospace;font-weight:700;}
+    .s-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;}
+    .s-hood{padding:8px 12px;background:#fff;border:1px solid #ccc;font-size:12px;color:#444;}
+    .s-hood strong{display:block;font-size:13px;color:#111;margin-bottom:2px;}
+    .s-notice{background:#f0f7f2;border-left:3px solid #1a5c34;padding:12px 14px;font-size:13px;color:#1a4a28;margin-bottom:16px;}
+    .s-faq-q{font-size:13px;font-weight:700;color:#111;margin-bottom:4px;}
+    .s-faq-a{font-size:13px;color:#444;line-height:1.65;margin-bottom:14px;padding-left:12px;border-left:2px solid #ccc;}
+    .s-footer{margin-top:32px;padding-top:16px;border-top:1px solid #ccc;font-size:11px;color:#767676;font-family:"Courier New",monospace;}
+    @media(max-width:480px){.s-wrap{padding:16px 12px 40px;}}
+  </style>
+</head>
+<body>
+  <nav class="s-nav">
+    <a href="https://fairrent.ca">Fair Rent Canada</a>
+    <span>Ottawa Rent Calculator</span>
+  </nav>
+
+  <!-- Static shell: crawlable by Google before React loads -->
+  <div class="s-wrap" id="static-shell">
+    <h1 class="s-h1">Ottawa Rent Calculator</h1>
+    <p class="s-intro">Check if your Ottawa rent is fair. Compare your monthly rent to real data from CMHC and verified Ottawa renter submissions, by neighbourhood. Free. Anonymous. No account required.</p>
+
+    <div class="s-notice">This tool is loading. If it does not appear, please enable JavaScript in your browser.</div>
+
+    <div class="s-section">
+      <h2 class="s-h2">Average rent in Ottawa by unit type (2025)</h2>
+      <table class="s-table">
+        <thead><tr><th>Unit type</th><th>Average rent / mo</th><th>Typical range</th></tr></thead>
+        <tbody>
+          <tr><td>Bachelor / Studio</td><td>$1,600</td><td>$1,400 to $1,850</td></tr>
+          <tr><td>1 Bedroom</td><td>$2,050</td><td>$1,750 to $2,350</td></tr>
+          <tr><td>2 Bedroom</td><td>$2,650</td><td>$2,200 to $3,100</td></tr>
+          <tr><td>3 Bedroom</td><td>$3,350</td><td>$2,800 to $4,000</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:11px;color:#767676;margin-top:6px;">Source: CMHC Rental Market Survey (October 2024) and community submissions. Updated March 2026.</p>
+    </div>
+
+    <div class="s-section">
+      <h2 class="s-h2">Average rent by neighbourhood in Ottawa</h2>
+      <div class="s-grid">
+        <div class="s-hood"><strong>Glebe</strong>About 20% above Ottawa average</div>
+        <div class="s-hood"><strong>Westboro</strong>About 18% above Ottawa average</div>
+        <div class="s-hood"><strong>Rockcliffe Park</strong>About 28% above Ottawa average</div>
+        <div class="s-hood"><strong>New Edinburgh</strong>About 16% above Ottawa average</div>
+        <div class="s-hood"><strong>Hintonburg</strong>About 10% above Ottawa average</div>
+        <div class="s-hood"><strong>Centretown</strong>About 8% above Ottawa average</div>
+        <div class="s-hood"><strong>Downtown Core</strong>About 15% above Ottawa average</div>
+        <div class="s-hood"><strong>Wellington Village</strong>About 12% above Ottawa average</div>
+        <div class="s-hood"><strong>Sandy Hill</strong>About 4% above Ottawa average</div>
+        <div class="s-hood"><strong>Kanata</strong>About 3% below Ottawa average</div>
+        <div class="s-hood"><strong>Orleans</strong>About 10% below Ottawa average</div>
+        <div class="s-hood"><strong>Barrhaven</strong>About 8% below Ottawa average</div>
+        <div class="s-hood"><strong>Nepean</strong>About 7% below Ottawa average</div>
+        <div class="s-hood"><strong>Vanier</strong>About 15% below Ottawa average</div>
+        <div class="s-hood"><strong>Rideau-Vanier</strong>About 13% below Ottawa average</div>
+      </div>
+    </div>
+
+    <div class="s-section">
+      <h2 class="s-h2">Frequently asked questions about Ottawa rent</h2>
+
+      <p class="s-faq-q">What is the average rent in Ottawa in 2025?</p>
+      <p class="s-faq-a">The average rent for a 1-bedroom apartment in Ottawa is about $2,050 per month in 2025, based on CMHC data. A 2-bedroom averages about $2,650 per month. Rents vary significantly by neighbourhood.</p>
+
+      <p class="s-faq-q">What is the average rent in Vanier, Ottawa?</p>
+      <p class="s-faq-a">Vanier is one of Ottawa's most affordable central neighbourhoods. Average rents run about 15% below the Ottawa average, making it one of the best value areas close to the downtown core.</p>
+
+      <p class="s-faq-q">What is the average rent in the Glebe, Ottawa?</p>
+      <p class="s-faq-a">The Glebe is one of Ottawa's most sought-after neighbourhoods. Rents typically run about 20% above the Ottawa average, reflecting high demand and proximity to the Rideau Canal and Bank Street.</p>
+
+      <p class="s-faq-q">What is the average rent in Westboro, Ottawa?</p>
+      <p class="s-faq-a">Westboro rents typically run about 18% above the Ottawa average. It is a high-demand neighbourhood in the west end, known for its shops and proximity to the Ottawa River and LRT.</p>
+
+      <p class="s-faq-q">Is rent controlled in Ottawa?</p>
+      <p class="s-faq-a">Yes, for units first occupied before November 15, 2018. The Ontario annual rent increase guideline for 2026 is 2.1%. Units first occupied after November 2018 are not rent controlled between tenancies.</p>
+
+      <p class="s-faq-q">How do I check if my Ottawa rent is fair?</p>
+      <p class="s-faq-a">Use the Ottawa Rent Calculator on this page. Enter your neighbourhood, unit type, and monthly rent. We compare it to CMHC data and anonymous Ottawa renter submissions to show you a fair range and a confidence score.</p>
+
+      <p class="s-faq-q">What is a fair rent in Ottawa for a bachelor apartment?</p>
+      <p class="s-faq-a">A fair rent for a bachelor or studio apartment in Ottawa is roughly $1,400 to $1,850 per month in 2025, depending on the neighbourhood. The median is about $1,600 per month.</p>
+    </div>
+
+    <p class="s-footer">Fair Rent Canada. Ottawa Rent Calculator. Data: CMHC 2025 and community submissions. Not legal advice. <a href="https://fairrent.ca" style="color:#767676;">fairrent.ca</a></p>
+  </div>
+
+  <div id="root"></div>
+  <script>
+    // Hide static shell once React has mounted
+    document.addEventListener('DOMContentLoaded', function() {
+      var observer = new MutationObserver(function() {
+        var root = document.getElementById('root');
+        if (root && root.children.length > 0) {
+          var shell = document.getElementById('static-shell');
+          if (shell) shell.style.display = 'none';
+          observer.disconnect();
+        }
+      });
+      var root = document.getElementById('root');
+      if (root) observer.observe(root, { childList: true });
+    });
+  </script>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
 </html>

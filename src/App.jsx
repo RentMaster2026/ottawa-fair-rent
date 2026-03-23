@@ -154,8 +154,8 @@ const CSS = `
 
   /* Layout */
   .page-wrap { max-width:1100px; margin:0 auto; padding:24px 16px 60px; }
-  .page-grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:start; }
-  .sticky-col { position:sticky; top:90px; }
+  .page-grid { display:grid; grid-template-columns:1.1fr 0.9fr; gap:24px; align-items:start; }
+  .sticky-col { position:sticky; top:92px; }
 
   /* Form panel */
   .form-panel { background:var(--white); border:1px solid var(--border); border-top:3px solid var(--accent); }
@@ -270,17 +270,21 @@ const CSS = `
   .sources { font-size:11px; color:var(--t3); line-height:1.6; padding-top:16px; border-top:1px solid var(--border); margin-top:24px; }
 
   /* Responsive */
-  @media(max-width:800px) {
+  .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media(max-width:860px) {
     .page-grid { grid-template-columns:1fr; }
     .sticky-col { position:static; }
   }
-  @media(max-width:480px) {
-    .page-wrap { padding:16px 12px 48px; }
+  @media(max-width:520px) {
+    .form-grid-2 { grid-template-columns:1fr; }
     .toggle-pair { grid-template-columns:1fr; }
-    .yn-pair { grid-template-columns:1fr 1fr; }
-    .action-row { grid-template-columns:1fr 1fr; }
-    .share-row { grid-template-columns:1fr 1fr; }
+    .page-wrap { padding:16px 12px 48px; }
     .form-body { padding:12px; gap:12px; }
+    .gov-count { display:none; }
+  }
+  @media(max-width:380px) {
+    .share-row { grid-template-columns:1fr 1fr; }
+    .action-row { grid-template-columns:1fr 1fr; }
   }
 `;
 
@@ -645,7 +649,7 @@ export default function App() {
                 <div className="form-body">
 
                   {/* Neighbourhood + Unit */}
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                  <div className="form-grid-2">
                     <div>
                       <label className="field-label">Neighbourhood</label>
                       <select className="f-select" value={hood} onChange={e=>setHood(e.target.value)} style={{ borderColor:errors.hood?"#8b1a1a":undefined }}>
@@ -665,7 +669,7 @@ export default function App() {
                   </div>
 
                   {/* Rent + Year */}
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                  <div className="form-grid-2">
                     <div>
                       <label className="field-label">Monthly rent (CAD)</label>
                       <input className="f-input" type="number" placeholder="e.g. 2200" value={rent} onChange={e=>setRent(e.target.value)} style={{ borderColor:errors.rent?"#8b1a1a":undefined }}/>

@@ -141,7 +141,7 @@
   <div id="root"></div>
   <script>
     (function() {
-      function hideShell() { var s=document.getElementById('static-shell'); if(s) s.style.display='none'; }
+      function hideShell() { var s=document.getElementById('static-shell'); if(s) s.style.display='none'; var nav = document.querySelector('.s-nav'); if (nav) nav.style.display = 'none'; }
       function watch() {
         var root = document.getElementById('root');
         if (!root) return;

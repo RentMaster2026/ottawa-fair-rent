@@ -196,7 +196,7 @@ export default function NeighbourhoodPage({ hood, city, onBack }) {
           {/* Page heading */}
           <div style={{ marginBottom:24, paddingBottom:16, borderBottom:"1px solid var(--border)" }}>
             <div style={{ fontSize:11, fontWeight:700, color:accentColor, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:8 }}>
-              {city.name} &mdash; Neighbourhood Report
+              {city.name} : Neighbourhood Report
             </div>
             <h1 style={{ fontSize:"clamp(18px,3vw,26px)", fontWeight:700, color:"var(--t1)", marginBottom:8, lineHeight:1.2 }}>
               Rental market data: {hood.name}, {city.name}
@@ -211,7 +211,7 @@ export default function NeighbourhoodPage({ hood, city, onBack }) {
 
               {/* Rent ranges table */}
               <div>
-                <div className="section-label">Estimated fair rent ranges &mdash; {hood.name}</div>
+                <div className="section-label">Estimated fair rent ranges: {hood.name}</div>
                 <table className="data-table">
                   <thead>
                     <tr>

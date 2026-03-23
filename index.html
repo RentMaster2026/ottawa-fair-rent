@@ -7,16 +7,18 @@
   <link rel="modulepreload" href="/src/main.jsx" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#1c2b36" />
-  <title>Ottawa Rent Calculator | Is My Rent Fair? | Fair Rent Canada</title>
-  <meta name="description" content="Check if your Ottawa rent is fair. Compare your rent to real data from CMHC and Ottawa renters by neighbourhood. Free, anonymous, no account needed." />
+  <title>Ottawa Rent Calculator | Fair Rent Canada</title>
+  <meta name="description" content="Free Ottawa rent calculator. Check if your rent is fair by neighbourhood. Based on CMHC data and real Ottawa renter submissions. No sign-up." />
   <link rel="canonical" href="https://ottawafairrent.ca/" />
   <meta name="robots" content="index, follow" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <link rel="shortcut icon" href="/favicon.svg" />
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://ottawafairrent.ca/" />
-  <meta property="og:title" content="Ottawa Rent Calculator | Is My Rent Fair?" />
-  <meta property="og:description" content="Free, anonymous Ottawa rent comparison tool based on CMHC data and real renter submissions." />
+  <meta property="og:title" content="Ottawa Rent Calculator | Fair Rent Canada" />
+  <meta property="og:description" content="Free Ottawa rent calculator. Check if your rent is fair by neighbourhood. Based on CMHC data and real Ottawa renter submissions." />
   <meta property="og:site_name" content="Fair Rent Canada" />
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"WebApplication","name":"Ottawa Rent Calculator","url":"https://ottawafairrent.ca","description":"Free tool to check if your Ottawa rent is fair. Compare your rent to real data from CMHC and Ottawa renters by neighbourhood.","applicationCategory":"FinanceApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"CAD"},"publisher":{"@type":"Organization","name":"Fair Rent Canada","url":"https://fairrent.ca"},"areaServed":{"@type":"City","name":"Ottawa","containedInPlace":{"@type":"Country","name":"Canada"}}}
@@ -46,6 +48,9 @@
     .s-faq-q{font-size:13px;font-weight:700;color:#111;margin-bottom:4px;}
     .s-faq-a{font-size:13px;color:#444;line-height:1.65;margin-bottom:14px;padding-left:12px;border-left:2px solid #ccc;}
     .s-footer{margin-top:32px;padding-top:16px;border-top:1px solid #ccc;font-size:11px;color:#767676;font-family:"Courier New",monospace;}
+    .s-cross-links{display:flex;gap:16px;flex-wrap:wrap;margin-top:16px;font-size:13px;}
+    .s-cross-links a{color:#1a5c34;font-weight:600;text-decoration:none;}
+    .s-cross-links a:hover{text-decoration:underline;}
     @media(max-width:480px){.s-wrap{padding:16px 12px 40px;}}
   </style>
 </head>
@@ -55,10 +60,9 @@
     <span>Ottawa Rent Calculator</span>
   </nav>
 
-  <!-- Static shell: crawlable by Google before React loads -->
   <div class="s-wrap" id="static-shell">
-    <h1 class="s-h1">Ottawa Rent Calculator</h1>
-    <p class="s-intro">Check if your Ottawa rent is fair. Compare your monthly rent to real data from CMHC and verified Ottawa renter submissions, by neighbourhood. Free. Anonymous. No account required.</p>
+    <h1 class="s-h1">Ottawa Rent Calculator: Check If Your Rent Is Fair</h1>
+    <p class="s-intro">Find out if your Ottawa rent is fair. Compare what you pay to real market data from CMHC and rent submissions from other Ottawa renters, broken down by neighbourhood. Free. Anonymous. No sign-up needed.</p>
 
     <div class="s-notice">This tool is loading. If it does not appear, please enable JavaScript in your browser.</div>
 
@@ -122,6 +126,15 @@
       <p class="s-faq-a">A fair rent for a bachelor or studio apartment in Ottawa is roughly $1,400 to $1,850 per month in 2025, depending on the neighbourhood. The median is about $1,600 per month.</p>
     </div>
 
+    <div class="s-section">
+      <h2 class="s-h2">Compare other cities</h2>
+      <div class="s-cross-links">
+        <a href="https://torontofairrent.ca">Toronto Rent Calculator</a>
+        <a href="https://vancouverfairrent.ca">Vancouver Rent Calculator</a>
+        <a href="https://fairrent.ca">All cities</a>
+      </div>
+    </div>
+
     <p class="s-footer">Fair Rent Canada. Ottawa Rent Calculator. Data: CMHC 2025 and community submissions. Not legal advice. <a href="https://fairrent.ca" style="color:#767676;">fairrent.ca</a></p>
   </div>
 
@@ -138,7 +151,6 @@
       }
       if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', watch); } else { watch(); }
     })();
-    });
   </script>
   <script type="module" src="/src/main.jsx" fetchpriority="high"></script>
 </body>

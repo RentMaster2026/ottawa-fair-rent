@@ -1,0 +1,12 @@
+{
+  "name": "Ottawa Rent Calculator",
+  "short_name": "OttawaRent",
+  "icons": [
+    { "src": "/favicon-32x32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/favicon-192x192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ],
+  "theme_color": "#1c2b36",
+  "background_color": "#f5f5f5",
+  "display": "standalone"
+}

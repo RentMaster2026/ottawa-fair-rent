@@ -46,12 +46,12 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://ottawafairrent.ca/vanier</loc>
+    <loc>https://ottawafairrent.ca/wellington-village</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://ottawafairrent.ca/wellington-village</loc>
+    <loc>https://ottawafairrent.ca/vanier</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>

@@ -1,29 +1,70 @@
 {
   "rewrites": [
-    { "source": "/centretown", "destination": "/neighbourhoods/centretown.html" },
-    { "source": "/glebe", "destination": "/neighbourhoods/glebe.html" },
-    { "source": "/westboro", "destination": "/neighbourhoods/westboro.html" },
-    { "source": "/hintonburg", "destination": "/neighbourhoods/hintonburg.html" },
-    { "source": "/byward-market", "destination": "/neighbourhoods/byward-market.html" },
-    { "source": "/kanata", "destination": "/neighbourhoods/kanata.html" },
-    { "source": "/barrhaven", "destination": "/neighbourhoods/barrhaven.html" },
-    { "source": "/sandy-hill", "destination": "/neighbourhoods/sandy-hill.html" },
-    { "source": "/wellington-village", "destination": "/neighbourhoods/wellington-village.html" },
-    { "source": "/vanier", "destination": "/neighbourhoods/vanier.html" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/centretown",
+      "destination": "/neighbourhoods/centretown.html"
+    },
+    {
+      "source": "/glebe",
+      "destination": "/neighbourhoods/glebe.html"
+    },
+    {
+      "source": "/westboro",
+      "destination": "/neighbourhoods/westboro.html"
+    },
+    {
+      "source": "/hintonburg",
+      "destination": "/neighbourhoods/hintonburg.html"
+    },
+    {
+      "source": "/byward-market",
+      "destination": "/neighbourhoods/byward-market.html"
+    },
+    {
+      "source": "/kanata",
+      "destination": "/neighbourhoods/kanata.html"
+    },
+    {
+      "source": "/barrhaven",
+      "destination": "/neighbourhoods/barrhaven.html"
+    },
+    {
+      "source": "/sandy-hill",
+      "destination": "/neighbourhoods/sandy-hill.html"
+    },
+    {
+      "source": "/wellington-village",
+      "destination": "/neighbourhoods/wellington-village.html"
+    },
+    {
+      "source": "/vanier",
+      "destination": "/neighbourhoods/vanier.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
       "source": "/favicon.svg",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
+        }
       ]
     },
     {
       "source": "/sitemap.xml",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
+        }
       ]
     }
-  ]
+  ],
+  "trailingSlash": false,
+  "cleanUrls": false
 }
